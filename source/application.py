@@ -461,7 +461,7 @@ class Application:
                 "Unknown acquisition backend",
             )
             require(
-                not within(Path(root).resolve(), s.root),
+                not within(Path(root).resolve(), s.root.resolve()),
                 "SOURCE_WORKSPACE",
                 "A source cannot be the working-evidence directory or its descendant",
             )

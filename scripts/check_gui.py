@@ -10,6 +10,7 @@ import argparse
 import importlib.metadata
 import platform
 import json
+import re
 import sys
 import tempfile
 import threading
@@ -30,7 +31,7 @@ def main():
         "--force-fallback-dialog", action="store_true", help="Qualify the non-native dialog path"
     )
     a = p.parse_args()
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import expect, sync_playwright
 
     out = Path(a.output)
     out.mkdir(parents=True, exist_ok=True)
@@ -79,7 +80,7 @@ def main():
                 errors = []
                 page.on("pageerror", lambda e: errors.append(str(e)))
                 page.add_init_script(
-                    "window.__cspViolations=[]; document.addEventListener('securitypolicyviolation', function(e){window.__cspViolations.push({blockedURI:e.blockedURI,directive:e.effectiveDirective});});"
+                    "window.__cspViolations=[]; document.addEventListener('securitypolicyviolation', function(e){window.__cspViolations.push({blockedURI:e.blockedURI,directive:e.effectiveDirective}); if(e.blockedURI==='inline') document.documentElement.setAttribute('data-test-inline-csp','blocked');});"
                 )
                 if a.force_fallback_dialog:
                     page.add_init_script(
@@ -88,9 +89,7 @@ def main():
                 response = page.goto(origin + "/", wait_until="networkidle")
                 assert response.status == 200
                 assert "script-src 'self'" in response.headers["content-security-policy"]
-                page.wait_for_function(
-                    "document.getElementById('workspace-name').textContent.length>0"
-                )
+                expect(page.locator("#workspace-name")).not_to_have_text("")
                 page.locator("#app-shell").wait_for(state="visible")
                 page.locator("#compatibility").wait_for(state="hidden")
                 passed("Native localhost navigation and capability bootstrap under the server CSP")
@@ -98,12 +97,12 @@ def main():
                 page.keyboard.press("Enter")
                 page.locator("#dialog-submit").focus()
                 page.keyboard.press("Tab")
-                assert page.locator("#dialog-close").evaluate("e=>e===document.activeElement")
+                expect(page.locator("#dialog-close")).to_be_focused()
                 page.keyboard.press("Shift+Tab")
-                assert page.locator("#dialog-submit").evaluate("e=>e===document.activeElement")
+                expect(page.locator("#dialog-submit")).to_be_focused()
                 page.keyboard.press("Escape")
                 assert not page.locator("#dialog").is_visible()
-                assert page.locator("#new-scan").evaluate("e=>e===document.activeElement")
+                expect(page.locator("#new-scan")).to_be_focused()
                 passed(
                     "Modal keyboard focus cycle, Escape dismissal and focus return"
                     + (
@@ -119,9 +118,7 @@ def main():
                 )
                 page.get_by_label("Acquisition", exact=True).select_option("filesystem")
                 page.get_by_role("button", name="Scan", exact=True).click()
-                page.wait_for_function(
-                    "document.getElementById('notice').textContent.includes('Scan complete')"
-                )
+                expect(page.locator("#notice")).to_contain_text("Scan complete", timeout=15000)
                 passed("Filesystem scan via GUI calls the actual acquisition code")
                 page.get_by_role("button", name="Create plan…", exact=True).click()
                 page.get_by_label("Minimum goal · GB", exact=True).fill("0")
@@ -143,8 +140,8 @@ def main():
                 # Inspector has a single codec select in this dialog.
                 page.locator("#dialog-body select").select_option("gzip")
                 page.get_by_role("button", name="Save revision", exact=True).click()
-                page.wait_for_function(
-                    "document.getElementById('notice').textContent.includes('Saved a new plan revision')"
+                expect(page.locator("#notice")).to_contain_text(
+                    "Saved a new plan revision", timeout=15000
                 )
                 page.wait_for_timeout(700)
                 passed("Codec edit saves a separate plan revision")
@@ -155,35 +152,36 @@ def main():
                 page.get_by_role("button", name="Build this plan…", exact=True).click()
                 page.get_by_label("Staging output directory", exact=True).fill(str(base / "build"))
                 page.get_by_role("button", name="Review build", exact=True).click()
-                assert page.get_by_role(
-                    "heading", name="Staging · retained archive set", exact=True
-                ).is_visible()
-                assert page.get_by_role(
-                    "heading", name="Final destination · separate copy", exact=True
-                ).is_visible()
+                expect(
+                    page.get_by_role("heading", name="Staging · retained archive set", exact=True)
+                ).to_be_visible(timeout=15000)
+                expect(
+                    page.get_by_role(
+                        "heading", name="Final destination · separate copy", exact=True
+                    )
+                ).to_be_visible()
                 page.get_by_role("button", name="Confirm build", exact=True).click()
-                page.wait_for_function(
-                    "document.getElementById('notice').textContent.startsWith('build: COMPLETE') && !document.getElementById('notice').classList.contains('error')",
-                    timeout=30000,
+                expect(page.locator("#notice")).to_have_text(
+                    re.compile(r"^build: COMPLETE"), timeout=30000
                 )
+                expect(page.locator("#notice")).not_to_have_class(re.compile(r"(^|\s)error(\s|$)"))
                 passed("Build preflight, explicit confirmation and real TAR/gzip verification")
                 page.get_by_role("button", name="3 Archive", exact=True).click()
                 page.wait_for_selector("#build-rows button")
                 page.get_by_role("button", name="Register destination…", exact=True).click()
                 page.get_by_label("Destination directory", exact=True).fill(str(base / "disk"))
                 page.get_by_role("button", name="Register", exact=True).click()
-                page.wait_for_function(
-                    "document.getElementById('destination-list').textContent.includes('Backup disk')"
+                expect(page.locator("#destination-list")).to_contain_text(
+                    "Backup disk", timeout=15000
                 )
                 page.get_by_role("button", name="Copy…", exact=True).first.click()
                 page.get_by_role("button", name="Review copy", exact=True).click()
-                assert page.get_by_role(
-                    "heading", name="Final destination · this replica", exact=True
-                ).is_visible()
+                expect(
+                    page.get_by_role("heading", name="Final destination · this replica", exact=True)
+                ).to_be_visible(timeout=15000)
                 page.get_by_role("button", name="Confirm copy", exact=True).click()
-                page.wait_for_function(
-                    "document.getElementById('notice').textContent.includes('copy: COPY_READBACK')",
-                    timeout=30000,
+                expect(page.locator("#notice")).to_contain_text(
+                    "copy: COPY_READBACK", timeout=30000
                 )
                 passed("Destination registration, identity review, copy and decoded readback")
                 replicas = list((base / "disk" / "AP20-archives").glob("replica-*"))
@@ -195,10 +193,7 @@ def main():
                 )
                 page.get_by_role("button", name="Review restoration…", exact=True).click()
                 page.get_by_role("button", name="Confirm restore", exact=True).click()
-                page.wait_for_function(
-                    "document.getElementById('notice').textContent.includes('RESTORED_VERIFIED')",
-                    timeout=30000,
-                )
+                expect(page.locator("#notice")).to_contain_text("RESTORED_VERIFIED", timeout=30000)
                 passed(
                     "Recovery from copied artifacts through GUI; no original DB required by reader"
                 )
@@ -232,9 +227,7 @@ def main():
                     str(base / "portable.ap20")
                 )
                 page.get_by_role("button", name="Export", exact=True).click()
-                page.wait_for_function(
-                    "document.getElementById('notice').textContent.includes('Exported:')"
-                )
+                expect(page.locator("#notice")).to_contain_text("Exported:", timeout=15000)
                 assert (base / "portable.ap20").exists()
                 passed("Unified File export produces a real portable workspace bundle")
                 assert not errors, errors
@@ -244,9 +237,7 @@ def main():
                     "var s=document.createElement('script'); s.textContent='window.__unexpectedInlineExecution=true'; document.head.appendChild(s);"
                 )
                 assert page.evaluate("window.__unexpectedInlineExecution === undefined")
-                page.wait_for_function(
-                    "window.__cspViolations.some(function(v){return v.blockedURI==='inline';})"
-                )
+                expect(page.locator("html")).to_have_attribute("data-test-inline-csp", "blocked")
                 passed("CSP rejects a deliberately injected inline script")
                 context = browser.new_context(java_script_enabled=False)
                 offline_page = context.new_page()
@@ -267,8 +258,8 @@ def main():
                     ),
                 )
                 limited_page.goto(origin + "/", wait_until="networkidle")
-                limited_page.wait_for_function(
-                    "document.getElementById('compatibility-message').textContent.includes('Missing capabilities: Fetch')"
+                expect(limited_page.locator("#compatibility-message")).to_contain_text(
+                    "Missing capabilities: Fetch", timeout=15000
                 )
                 assert not limited_page.locator("#app-shell").is_visible()
                 assert not api_requests, api_requests

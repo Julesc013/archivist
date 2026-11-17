@@ -116,12 +116,48 @@ class InventoryTests(Fixture):
         )
         self.build(p, accept_exclusions=True)
 
-    @unittest.skipIf(os.name == "nt", "Case-sensitive filesystem fixture")
     def test_case_collision_blocks_execution(self):
+        # An export can describe distinct case-sensitive source entries even
+        # when the test host would collapse File.txt and file.txt into one file.
+        # Exercise the shared inventory reconciliation and build guard without
+        # making the host filesystem's case sensitivity a fixture requirement.
+        timestamp = "133000000000000000"
+        rows = [
+            ["D:\\a\\File.txt", "5", timestamp, "32"],
+            ["D:\\a\\other.txt", "5", timestamp, "32"],
+        ]
+        control = self.import_rows(rows)
+        self.assertEqual(control["counts"]["errors"], 0)
+        self.assertEqual(control["counts"]["eligible_files"], 2)
+
+        rows[1][0] = "D:\\a\\file.txt"
+        s = self.import_rows(rows)
+        self.assertEqual(s["counts"]["invalid_rows"], 0)
+        self.assertEqual(s["counts"]["eligible_files"], 2)
+        self.assertEqual(s["counts"]["errors"], 1)
+        issues = self.app.call("issues", {"snapshot_id": s["snapshot_id"]})
+        self.assertEqual(
+            [(issue["code"], issue["severity"], issue["path"]) for issue in issues],
+            [("PORTABLE_COLLISION", "error", "a/file.txt")],
+        )
+        p = self.plan(s["snapshot_id"])
+        self.assert_problem(
+            "SOURCE_ERRORS",
+            "preflight_build",
+            {"plan_id": p["id"], "output": str(self.base / "out")},
+        )
+
+    def test_case_collision_on_case_sensitive_filesystem(self):
         self.file("a/File.txt")
         self.file("a/file.txt")
+        names = {entry.name for entry in (self.source / "a").iterdir()}
+        if names != {"File.txt", "file.txt"}:
+            self.skipTest("Fixture filesystem folds case; the EFU test covers collision rejection")
         s = self.scan()
-        self.assertGreater(s["counts"]["errors"], 0)
+        self.assertEqual(s["counts"]["eligible_files"], 2)
+        self.assertEqual(s["counts"]["errors"], 1)
+        issues = self.app.call("issues", {"snapshot_id": s["snapshot_id"]})
+        self.assertEqual([issue["code"] for issue in issues], ["PORTABLE_COLLISION"])
         p = self.plan(s["snapshot_id"])
         self.assert_problem(
             "SOURCE_ERRORS",
@@ -140,6 +176,18 @@ class InventoryTests(Fixture):
         self.assert_problem(
             "SOURCE_WORKSPACE", "scan", {"root": str(self.workspace), "backend": "filesystem"}
         )
+
+    def test_workspace_descendant_cannot_be_source(self):
+        nested_source = self.workspace / "nested" / "source"
+        nested_source.mkdir(parents=True)
+        (nested_source / "data.txt").write_bytes(b"working evidence must not be scanned")
+        self.assert_problem(
+            "SOURCE_WORKSPACE",
+            "scan",
+            {"root": str(nested_source), "backend": "filesystem"},
+        )
+        self.assertEqual(self.app.call("sources"), [])
+        self.assertEqual(self.app.call("scans"), [])
 
     def test_efu_accounting_and_inferred_directories(self):
         ftime = "133000000000000000"
