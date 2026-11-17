@@ -1,0 +1,87 @@
+{
+  "date": "2026-11-17",
+  "status": "development_validation",
+  "javascript_handler_checks": {
+    "command": "node tests/gui_state.test.cjs",
+    "passed": 13,
+    "failed": 0,
+    "method": "shipped app.js in a minimal DOM; controlled API responses",
+    "checks": [
+      {
+        "check": "Off-page selection opens its actual gzip encoding and level",
+        "result": "PASS"
+      },
+      {
+        "check": "Clearing plan removes stale rows, inspector and enabled actions",
+        "result": "PASS"
+      },
+      {
+        "check": "Move chooser searches compatible packages outside the visible page",
+        "result": "PASS"
+      },
+      {
+        "check": "Selecting a package fetches its member list once",
+        "result": "PASS"
+      },
+      {
+        "check": "Same-label plan revisions have distinct visible identity",
+        "result": "PASS"
+      },
+      {
+        "check": "Older object pages remain reachable beyond 100 records",
+        "result": "PASS"
+      },
+      {
+        "check": "Terminal progress never reports an active stall or ETA; running throughput is shown",
+        "result": "PASS"
+      },
+      {
+        "check": "Task polling fetches a terminal result once and resolves its waiter",
+        "result": "PASS"
+      },
+      {
+        "check": "Connection errors keep pending work pending and show reconnect status",
+        "result": "PASS"
+      },
+      {
+        "check": "Recovery lookup selects full matched packages and required directory metadata explicitly",
+        "result": "PASS"
+      },
+      {
+        "check": "Partial recovery kits report missing or unknown directory metadata honestly",
+        "result": "PASS"
+      },
+      {
+        "check": "Media fit keeps native input explicit and reports missing metadata despite byte fit",
+        "result": "PASS"
+      },
+      {
+        "check": "Diagnostics show actionable checks before optional exact details",
+        "result": "PASS"
+      }
+    ]
+  },
+  "new_python_tests": {
+    "command": "python -m unittest discover -s tests -p test_gui_v2.py -v",
+    "passed": 4,
+    "failed": 0
+  },
+  "existing_http_tests": {
+    "suite": "test_runtime.HttpTests",
+    "passed": 8,
+    "failed": 0
+  },
+  "syntax": {
+    "javascript": "passed",
+    "python_changed_files": "passed"
+  },
+  "native_browser": {
+    "status": "unqualified",
+    "reason": "Installed Chromium aborts with socket() failed: Operation not permitted; bundled Playwright browser absent"
+  },
+  "limitations": [
+    "No browser layout, focus, screen-reader or CSP enforcement pass",
+    "No native Windows/macOS, live Everything or physical LTFS qualification",
+    "Recovery search selects complete packages, not individual-member extraction"
+  ]
+}

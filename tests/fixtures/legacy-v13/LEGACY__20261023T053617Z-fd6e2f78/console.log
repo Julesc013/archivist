@@ -1,0 +1,25 @@
+05:36:17.272 +000000.001 INF RUN      LOGOPEN    console_level="quiet" color=False trace_file=False detail_level="info" structured_log="events.jsonl.gz"
+05:36:17.273 +000000.002 INF EXPORT   FLUSH      path="/mnt/data/v20_work/legacy_ws/LEGACY__20261023T053617Z-fd6e2f78/inventory.json" size_bytes=951(951B|951B)
+05:36:17.276 +000000.005 INF EXPORT   WRITE      path="/mnt/data/v20_work/legacy_ws/LEGACY__20261023T053617Z-fd6e2f78/inventory.json" size_bytes=951(951B|951B) sha256="38e4bc9ae0e04473388bb4d341c026d243ebba6f9908baee137dcac6d1cc6fe3"
+05:36:17.287 +000000.016 INF PREFLT   BEGIN      root="/mnt/data/v20_work/legacy_source" backend="filesystem" hash=False
+05:36:17.287 +000000.016 INF PREFLT   IDENTITY   source_id="LEGACY" volume={"host":"428b2950b3c8","os":"Linux","volume_id":"27","mount":"/","label":null,"filesystem":null,"physical_disk_id":null,"identity_scope":"observed host-local logical volume; not physical disk identity"} results="/mnt/data/v20_work/legacy_ws/LEGACY__20261023T053617Z-fd6e2f78"
+05:36:17.288 +000000.016 INF PREFLT   END        sec=0.0
+05:36:17.288 +000000.017 INF SCAN     BEGIN      
+05:36:17.289 +000000.018 INF SCAN     END        sec=0.002
+05:36:17.290 +000000.019 INF SCAN     BACKEND    requested="filesystem" actual="Filesystem" fallback=False
+05:36:17.290 +000000.019 INF CALC     BEGIN      
+05:36:17.291 +000000.020 INF CALC     END        sec=0.001
+05:36:17.291 +000000.020 INF EXPORT   BEGIN      
+05:36:17.292 +000000.021 INF EXPORT   FLUSH      path="/mnt/data/v20_work/legacy_ws/LEGACY__20261023T053617Z-fd6e2f78/audit.json" size_bytes=1754(1.754KB|1.713KiB)
+05:36:17.293 +000000.022 INF EXPORT   WRITE      path="/mnt/data/v20_work/legacy_ws/LEGACY__20261023T053617Z-fd6e2f78/audit.json" size_bytes=1754(1.754KB|1.713KiB) sha256="88a329b278dda6e5632e68223a957fd4ac44d7dccf951d13217cdf2292e41583"
+05:36:17.294 +000000.023 INF EXPORT   FLUSH      path="/mnt/data/v20_work/legacy_ws/LEGACY__20261023T053617Z-fd6e2f78/ai-summary.json" size_bytes=869(869B|869B)
+05:36:17.295 +000000.024 INF EXPORT   WRITE      path="/mnt/data/v20_work/legacy_ws/LEGACY__20261023T053617Z-fd6e2f78/ai-summary.json" size_bytes=869(869B|869B) sha256="fb60f20fa0d5aab24b7d04d7e1c0afa3d859f7f976c8a8a16758b43abf65ed38"
+05:36:17.295 +000000.024 INF EXPORT   FLUSH      path="/mnt/data/v20_work/legacy_ws/LEGACY__20261023T053617Z-fd6e2f78/report.html" size_bytes=1214(1.214KB|1.186KiB)
+05:36:17.296 +000000.025 INF EXPORT   WRITE      path="/mnt/data/v20_work/legacy_ws/LEGACY__20261023T053617Z-fd6e2f78/report.html" size_bytes=1214(1.214KB|1.186KiB) sha256="2f89499a18d7957f5128e571dda8ac9fd2b7d4e10a983c93197a1d0cb1c3bc87"
+05:36:17.296 +000000.025 INF EXPORT   END        sec=0.005
+05:36:17.299 +000000.028 INF EXPORT   FLUSH      path="/mnt/data/v20_work/legacy_ws/LEGACY__20261023T053617Z-fd6e2f78/inventory.json" size_bytes=1359(1.359KB|1.327KiB)
+05:36:17.300 +000000.029 INF EXPORT   WRITE      path="/mnt/data/v20_work/legacy_ws/LEGACY__20261023T053617Z-fd6e2f78/inventory.json" size_bytes=1359(1.359KB|1.327KiB) sha256="4b6d3575697738d110f92973b97e7b23c02e4f8cbc1889a43146ebc120a8dd05"
+05:36:17.301 +000000.030 INF EXPORT   FLUSH      path="/mnt/data/v20_work/legacy_ws/LEGACY__20261023T053617Z-fd6e2f78/SHA256SUMS.json" size_bytes=439(439B|439B)
+05:36:17.302 +000000.031 INF EXPORT   WRITE      path="/mnt/data/v20_work/legacy_ws/LEGACY__20261023T053617Z-fd6e2f78/SHA256SUMS.json" size_bytes=439(439B|439B) sha256="83415b23af7ff58517c0389206fe3c29fb873e78ff84ba2cd99ea931513e755d"
+05:36:17.302 +000000.031 INF RUN      COMPLETE   state="COMPLETE" files=1 size_bytes=15(15B|15B) issues=0 result="/mnt/data/v20_work/legacy_ws/LEGACY__20261023T053617Z-fd6e2f78"
+05:36:17.302 +000000.031 INF RUN      LOGCLOSE   events=31 omitted_detail_events=33 detail_level="info"

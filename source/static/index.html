@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="ap20-token" content="__SESSION_TOKEN__"><title>Archivist</title><link rel="stylesheet" href="/app.css"><script defer src="/app.js"></script></head>
+<body>
+<a class="skip" href="#main">Skip to workspace</a>
+<header class="appbar">
+  <strong>Archivist <span id="app-version" class="muted"></span></strong>
+  <details id="file-menu" class="menu"><summary>File</summary><div role="group" aria-label="File commands">
+    <button data-file="open">Open workspace…</button><button data-file="export">Export workspace…</button><button data-file="import">Import workspace…</button><button data-file="legacy">Import V12/V13 evidence…</button><hr>
+    <button data-file="efu">Import Everything export…</button><button data-file="scan-export">Export selected scan…</button><hr>
+    <button data-file="doctor">Check tools</button><button data-file="help">Recovery instructions</button><button data-file="quit">Quit service</button>
+  </div></details>
+  <span id="workspace-name" class="workspace-name" title="Active evidence workspace"></span>
+  <span id="connection-state" class="muted" role="status">Connecting…</span>
+  <label class="appearance">Appearance <select id="appearance" aria-label="Appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+</header>
+<nav class="workflow" aria-label="Workflow"><button data-view="sources" aria-current="page">1 Sources</button><button data-view="plan">2 Plan</button><button data-view="archive">3 Archive</button><button data-view="restore">4 Recover</button><button id="refresh" class="end" title="Reload recorded evidence; does not rescan source files">Refresh</button></nav>
+<div id="notice" role="status" aria-live="polite" hidden></div>
+<main id="main" tabindex="-1">
+  <section id="view-sources" class="view">
+    <div class="view-head"><div><h1>Sources</h1><p>Saved observations. Browse and plan without reconnecting the original drive.</p></div><button id="new-scan" class="primary">Scan a source…</button></div>
+    <div class="toolbar environment"><span id="environment-summary" class="grow"></span><button id="check-tools">Check tools…</button></div>
+    <div class="workpair source-pair"><aside class="panel"><h2>Recorded scans</h2><div id="scan-list" class="object-list"></div><button id="scan-load-more" hidden>Load older scans</button><button id="source-bind" class="secondary">Bind a moved/imported source…</button></aside>
+      <section class="panel"><div class="toolbar"><button id="tree-up" title="Parent directory">↑ Up</button><span id="tree-path" class="path"></span><button id="use-plan" class="end primary">Create plan…</button></div><div id="scan-summary" class="summary"></div>
+      <div class="table-scroll"><table><thead><tr><th>Name</th><th>Kind</th><th>Logical size</th><th>Included</th></tr></thead><tbody id="tree-rows"></tbody></table></div><div id="tree-pages" class="pager"></div>
+      <details><summary>File-type totals and scan issues</summary><div class="workpair"><div id="type-list"></div><div id="issue-list"></div></div></details>
+      </section>
+    </div>
+  </section>
+  <section id="view-plan" class="view" hidden>
+    <div class="view-head"><div><h1>Plan</h1><p>Keep directories together. Every edit saves a separate revision.</p></div><button id="new-plan" class="primary">New plan…</button></div>
+    <div class="toolbar"><label class="grow">Saved plan <select id="plan-select"></select></label><button id="plan-load-more" hidden>Load older plans</button><button id="merge-packages" disabled>Merge selected</button><button id="open-build" class="primary" disabled>Build this plan…</button></div>
+    <div id="plan-revision-note" class="revision-note muted"></div>
+    <div id="plan-summary" class="summary"></div>
+    <div class="workpair package-pair"><section class="panel"><div class="table-scroll"><table><thead><tr><th class="select-col"><span class="sr-only">Select</span></th><th>Package / group</th><th>Files</th><th>Logical size</th><th>Encoding</th><th>State</th></tr></thead><tbody id="package-rows"></tbody></table></div><div id="package-pages" class="pager"></div></section>
+      <aside id="inspector" class="panel"><div class="toolbar"><h2 id="package-name">Select a package</h2><button id="edit-codec" class="end" disabled>Encoding…</button></div><p id="package-reason" class="muted"></p><div class="toolbar"><button id="sample-codec" disabled>Test compression</button><button id="move-members" disabled>Move selected files…</button></div>
+      <div class="table-scroll member-list"><table><thead><tr><th></th><th>Original path</th><th>Size</th></tr></thead><tbody id="member-rows"></tbody></table></div><div id="member-pages" class="pager"></div><div id="sample-results"></div></aside>
+    </div>
+    <details id="allocation"><summary>Check fit on media</summary><p class="muted">Uses measured artifacts when a checked build is available; otherwise uses estimates without promised compression savings. Native presets are references. For mounted media, enter observed available capacity and an additional reserve; copy preflight rechecks actual free space.</p><div class="toolbar"><label>Medium <select id="media-preset"><option value="6000">LTO-7 · 6 TB native</option><option value="12000">LTO-8 · 12 TB native</option><option value="18000">LTO-9 · 18 TB native</option><option value="25">Optical · 25 GB nominal</option><option value="1000">Disk / custom</option></select></label><label>Capacity / available GB <input id="media-capacity" type="number" min="0.01" value="6000" step="any" title="Enter a native planning reference or observed available bytes divided by 1,000,000,000. No fixed LTFS formatting deduction is assumed."></label><label>Count <input id="media-count" type="number" min="1" max="50" value="1"></label><label>Reserve % <input id="media-reserve" type="number" min="0" max="99" value="5"></label><button id="fit-media">Calculate fit</button></div><div id="allocation-results"></div></details>
+  </section>
+  <section id="view-archive" class="view" hidden>
+    <div class="view-head"><div><h1>Archive</h1><p>Build first, then copy independently verified artifacts to your chosen destinations.</p></div><button id="build-plan" class="primary">Build saved plan…</button></div>
+    <section class="panel"><h2>Built archive sets</h2><div class="table-scroll"><table><thead><tr><th>State</th><th>Plan</th><th>Staging location</th><th>Actions</th></tr></thead><tbody id="build-rows"></tbody></table></div><button id="build-load-more" hidden>Load older archive sets</button></section>
+    <section class="panel"><h2>Stored copies</h2><p class="muted">Each copy keeps its own identity and recorded state. Verification is evidence from a particular run.</p><div class="table-scroll"><table><thead><tr><th>Recorded state</th><th>Copy</th><th>Location</th><th>Recorded</th><th>Actions</th></tr></thead><tbody id="replica-rows"></tbody></table></div><button id="replica-load-more" hidden>Load older copies</button></section>
+    <section class="panel"><div class="toolbar"><h2>Destinations</h2><button id="new-destination" class="end">Register destination…</button></div><div id="destination-list"></div></section>
+    <details><summary>Operation history</summary><div id="history-list"></div></details>
+  </section>
+  <section id="view-restore" class="view" hidden>
+    <div class="view-head"><div><h1>Recover</h1><p>Works from the archive set and its receipts. Original sources and working databases are not required.</p></div></div>
+    <section class="panel narrow"><label>Archive-set directory <input id="recover-source" spellcheck="false" placeholder="Directory containing ARCHIVE.json and packages/"></label>
+      <details><summary>Find paths and choose packages</summary><label>Path or filename contains <input id="recover-query" spellcheck="false" placeholder="For example, Projects/ or notes.txt"></label><button id="find-recovery">Search recorded members</button><p id="recovery-search-summary" class="muted"></p><div class="table-scroll"><table><thead><tr><th>Original path</th><th>Package</th><th>Size</th></tr></thead><tbody id="recovery-matches"></tbody></table></div><div id="recovery-pages" class="pager"></div><button id="use-recovery-matches" disabled>Use matching packages</button></details>
+      <div class="toolbar"><span id="recovery-selection" class="grow">All packages selected.</span><button id="clear-recovery-selection" hidden>Use all packages</button></div><p class="muted">A selected package is restored completely. Search validates catalogue metadata; verify or restore reads payload contents.</p>
+      <div class="toolbar"><button id="verify-set" class="primary">Verify selected contents</button></div><hr>
+      <label>Restore into a new directory <input id="recover-output" spellcheck="false" placeholder="Must not already exist"></label><label class="check"><input id="restore-mode" type="checkbox">Restore ordinary permission bits where supported</label><button id="restore-set">Review restoration…</button>
+      <p class="muted">The final directory is published only after verification. Failed attempts retain a clearly named partial directory. No existing files are overwritten.</p></section>
+    <div id="recovery-result"></div>
+  </section>
+</main>
+<footer class="activity"><div class="toolbar"><strong id="task-phase">Ready</strong><span id="task-metrics" class="muted"></span><button id="cancel-task" class="end" disabled>Cancel</button><button id="show-activity">Activity</button></div><progress id="task-progress" value="0" max="1" aria-label="Current operation progress"></progress><div id="task-path" class="path muted">No source reads or writes in progress.</div></footer>
+<dialog id="dialog"><form id="dialog-form"><header class="toolbar"><h2 id="dialog-title"></h2><button id="dialog-close" type="button" class="end" aria-label="Close dialog">×</button></header><div id="dialog-body"></div><p id="dialog-error" class="error" role="alert"></p><footer class="toolbar"><button id="dialog-cancel" type="button">Cancel</button><button id="dialog-submit" type="submit" class="end primary">Continue</button></footer></form></dialog>
+</body></html>

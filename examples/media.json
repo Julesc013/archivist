@@ -1,0 +1,4 @@
+[
+  {"id":"HOME001L7","capacity":5731000000000,"reserve":286550000000,"occupied":0,"max_file":5731000000000},
+  {"id":"Disk-copy","capacity":6000000000000,"reserve":300000000000,"occupied":0,"max_file":6000000000000}
+]

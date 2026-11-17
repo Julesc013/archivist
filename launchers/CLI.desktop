@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Archivist — CLI
+Comment=Local archive planning and independently recoverable backups
+Exec=sh -c "exec \"$(dirname \"$1\")/CLI.sh\"" sh %k
+Terminal=true
+Categories=Utility;Archiving;
+Icon=package-x-generic
+StartupNotify=false

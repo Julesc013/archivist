@@ -1,0 +1,79 @@
+{
+  "recorded_utc": "2026-11-17T07:58:54.666854+00:00",
+  "product_version": "2.0.0-alpha.1",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "sqlite": "3.53.1",
+  "source_hashes": {
+    "archive_planner.py": "28be3db608c791fc90744850afee6c98d833d92d3a9548c029b04f490ecc3b4e",
+    "pyproject.toml": "e7fb40ad3b2d263a0df3c94fc4d7a7d047d0c57a6e3c388ceef7cdcf5aaf16ea",
+    "scripts/benchmark.py": "6fa60d3687ef6321fc3d36426c5e7fb8f4bb228dd41f5139de50c0bc88cf9150",
+    "scripts/benchmark_v2.py": "34c22dfde067acc20f68a00f109eac9c6bbc4cc29e122ce4958af43ff4c45376",
+    "scripts/build_release.py": "9130df62cdbfdf6500fe600d75c08e6897d70cfda7b7ce8bae0677747694cfea",
+    "scripts/check_gui.py": "1690c0b9a11e2ac1e4fbbd3d26ab56b1491c6a1cfbbbab85a00d4bee059ee181",
+    "scripts/check_python_distribution.py": "cc3747444c9787a1dea502a634572d7710fe718e28b8b7d366038742d80328bf",
+    "scripts/check_release.py": "fa06393dda3a6b4ec2111bb9e46cb67253da337004de1141417a84a66bdef812",
+    "scripts/run_tests.py": "11e19d729202e8918841fcf60e3197fffff4a8d8fd87e33db686e797dcfe8458",
+    "source/__init__.py": "f9bdb0b3babcf38a4fada912df1be5538d8f0485f4c97da7eb2be552f7488c30",
+    "source/application.py": "63b6e7f64a18b982b30872854d73837e0f767930f10aa27f62a258321575f774",
+    "source/archive_html.py": "7d746d22b231e9cb5de8b4420da496947c93c593c62966356e30f5c1f468a134",
+    "source/artifacts.py": "c2553d0ee8279a791040fef417b0fd3641259027566519db7c1d88664a61a746",
+    "source/capacity.py": "bbc38f6b2ee977fbd25274d13c93aa06679f3aa061159566a95a4ae0f06a8344",
+    "source/catalogue.py": "0fe5cf558983cf4ddc18ed190229690718b48312ce9d134aa691362c8e8895d5",
+    "source/cli.py": "6d12bfd9ce927e449a5e7f026797e37aa7adad71253d0cec26136aadb581c58c",
+    "source/destinations.py": "ddd1628a8e05f9eddfcc1349bcc179ad1832f9fa5fdc4e5ae7a183bba36796e7",
+    "source/evidence.py": "75e71e0c210811e32565588e076a2572799c85cca2e9c0e90fa898d80568186f",
+    "source/inventory.py": "0366a709f6197d14c7fadc34780df7c719bd7191ce4afa3fd2e3f8369254e5c6",
+    "source/kit_publication.py": "0e93c9e2bd0129838dd5a26a1ae94b1e7164a53f8245da44b1e31da63853cb57",
+    "source/path_cache.py": "eadd30146070a77dcd55e43b61c26a910ea83934237b96642644631e07b755c4",
+    "source/planning.py": "0e800b5ae97316a308122d2d0ee1cf05b765c1fb3c7791b0bd54cf25a1427702",
+    "source/progress.py": "47b9c9e42217cdaaff7c2d690532d9708735a4a0a5f08b0a53e3a7d32bb60df5",
+    "source/recovery.py": "69a1c287006174a88c9dd9423f923bd5a4060675468bfc0450144f5a475554d4",
+    "source/sampling.py": "e27f04f36fe415054ec3769cd7bc4ca98d494296575b914efa869c08f1f8bae1",
+    "source/static/app.css": "0e5003f58c03288d9427f6b94848c63f1dea38b6e909b69517c1d4e5464b32d5",
+    "source/static/app.js": "f088a6db03c48e67de29f89d975fd114e5139136b5efd0a41a5a2be80a1849d5",
+    "source/static/index.html": "582a73b1afff8c7101f5ed924a94c0be7fdfee126ce30cc152a586afdbbc829e",
+    "source/store.py": "4ac9bf7619c9d568bfba2eb792932a47c468ccb465709a7aa3f629c9c3d30f51",
+    "source/util.py": "5b349cfcb372f2eeb742901aeedeacc8bfa9fdc9d317ce10b1a63e24448c38a6",
+    "source/web.py": "4004ded183fcec194554f53bdd2c983041b4f5d692058fb0c70db2f46a5240fe",
+    "tests/fixtures/legacy-v13/LEGACY__20261023T053617Z-fd6e2f78/report.html": "2f89499a18d7957f5128e571dda8ac9fd2b7d4e10a983c93197a1d0cb1c3bc87",
+    "tests/gui_state.test.cjs": "0defb689b2c61c47bf24400a181076a0c2d269de8feeaac8a76390359a760edf",
+    "tests/test_application_v2.py": "e3083bc6d16e2fa5661f0d8b84bef79b0c404d6103aedba2d56320f00f0bed9a",
+    "tests/test_cache_v2.py": "e3d5a198bc5847bb8f8bff799993d2d4333c473f7789d77c31bd38ba486cde0a",
+    "tests/test_copy_resume_v2.py": "d5ae947488a0e064f1171ce63c643021c8fd4f1ff8b2b8c9ac27bc498b48a594",
+    "tests/test_core.py": "9e735a3d31c57f2f17efce7b7cc6255b894279f6a0560eabdc6cf35e1def58a1",
+    "tests/test_gui_v2.py": "f78e2c293a6d422024d4d50422f97835cba48968366b764ea2c25952acf30bf6",
+    "tests/test_migration.py": "0aab85a533aac3fe54d6a6b263d39e9952164043930195bbe05de7e2fe5b776d",
+    "tests/test_planning_v2.py": "50b57b99e888970bd7ac26b0e7d19b7dd6577e7aa12db4408cc8e8805bb570f4",
+    "tests/test_publication_v2.py": "4d7a65088f8be0d5481a6d806009b40fb0e2a15b808eaf3c926f792d42ad8e9b",
+    "tests/test_recovery_v2.py": "5e7bd1abadbe8a2cf303795a11bccbbde8462ccb23005ef239a41bcc715a35c1",
+    "tests/test_release_v2.py": "85d24ae8122ec58ee4c317ad025a70db25e7be1dd60159371059e9a87f89747c",
+    "tests/test_review_scope_v2.py": "172fb31e1a783de06418414c18394301d57c57d6605cfc6bf0e8bc0b9e057337",
+    "tests/test_runtime.py": "27dc5746ee1a6d15010e6f4e5e8a74a8ecfeea241bec40e427da6fdea90dfff7"
+  },
+  "verification": {
+    "ruff_lint": {
+      "version": "0.17.5",
+      "result": "PASS",
+      "command": "ruff check source scripts tests archive_planner.py"
+    },
+    "ruff_format": {
+      "result": "PASS",
+      "python_files": 39,
+      "command": "ruff format --check source scripts tests archive_planner.py"
+    },
+    "python_compileall": {
+      "result": "PASS",
+      "command": "python3 -m compileall -q source scripts tests archive_planner.py"
+    },
+    "javascript_syntax": {
+      "result": "PASS",
+      "command": "node --check source/static/app.js"
+    },
+    "v20_original_files": {
+      "sealed_files_checked": 69,
+      "result": "UNCHANGED"
+    }
+  },
+  "interpretation": "Records observed local checks. Full suite details live in the adjacent interpreter-specific JSON files. This is not native platform or hardware qualification."
+}

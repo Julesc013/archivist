@@ -1,0 +1,4 @@
+# Tested local build/lint toolchain; not application runtime dependencies.
+ruff==0.17.5
+setuptools==84.2.1
+wheel==0.48.0

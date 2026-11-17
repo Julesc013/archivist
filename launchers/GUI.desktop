@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Archivist — GUI
+Comment=Local archive planning and independently recoverable backups
+Exec=sh -c "exec \"$(dirname \"$1\")/GUI.sh\"" sh %k
+Terminal=true
+Categories=Utility;Archiving;
+Icon=package-x-generic
+StartupNotify=false

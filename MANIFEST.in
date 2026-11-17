@@ -1,0 +1,11 @@
+include archivist.py README.md CHANGELOG.md LICENSE THIRD-PARTY.md START-HERE.txt
+include CONTRIBUTING.md SECURITY.md pyproject.toml
+include requirements-dev.txt
+recursive-include source *.py *.html *.css *.js
+recursive-include launchers *.sh *.command *.cmd *.desktop
+recursive-include scripts *.py *.js
+recursive-include docs *.md *.json *.txt
+recursive-include tests *.py *.cjs *.json *.jsonl *.txt *.sqlite *.gz *.log *.html
+recursive-include examples *.json
+global-exclude __pycache__ *.py[cod]
+

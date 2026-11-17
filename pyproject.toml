@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "archivist-archive"
+dynamic = ["version"]
+description = "Local directory-first archive planning and independent recovery"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = []
+
+[project.scripts]
+archivist = "archivist.cli:main"
+
+[tool.setuptools]
+include-package-data = false
+packages = ["archivist"]
+package-dir = {"archivist" = "source"}
+
+[tool.setuptools.dynamic]
+version = {attr = "archivist.__package_version__"}
+
+[tool.setuptools.package-data]
+archivist = ["static/*"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*.py" = ["E402"]
+"tests/*.py" = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

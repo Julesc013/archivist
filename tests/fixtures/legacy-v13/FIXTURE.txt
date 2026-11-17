@@ -1,0 +1,1 @@
+Synthetic evidence produced by the actual Archive Planner v13.0.0-eval.1 runtime on 2026-10-23. One 15-byte note, a Photos directory, and an Empty directory. Paths are temporary test locations. No user files. Old files are never modified by migration.

@@ -1,0 +1,560 @@
+{
+  "recorded_utc": "2026-11-17T07:54:01.558065+00:00",
+  "scope": "Single samples of bounded synthetic inventory/planning operations in fresh processes. No tape, live Everything, compression, restore throughput, native GUI, million-file scale or cold-cache performance claim.",
+  "interpretation": "Compare the 50k/100k pair at fixed topology and policy. Other shapes intentionally vary directory ratio/depth and sometimes planning policy. Peak RSS is cumulative within each worker, not additive per phase.",
+  "runs": [
+    {
+      "name": "efu-50000-fixed-tree",
+      "status": "COMPLETE",
+      "fixture": {
+        "name": "efu-50000-fixed-tree",
+        "mode": "efu",
+        "shape_name": "fixed_tree",
+        "files": 50000,
+        "input": "/tmp/archive-planner-scaling-awyzcdoe/efu-50000-fixed-tree/fixture.efu",
+        "expected_files": 50000,
+        "expected_directories": 1126,
+        "expected_bytes": 2475402025000,
+        "input_bytes": 4469425,
+        "input_sha256": "fab2947df12adeeaa521baced9ea4f4696ec29a412d91e680273ddf5d2e80426",
+        "source_create_seconds": 0.12525113300216617,
+        "shape": "25 collections / 100 groups / 1,000 projects; fixed 1,126 directories including root; mixed suffixes; synthetic sizes of 1,000 to 100,000,999 bytes.",
+        "policy": {
+          "minimum": 10000000000,
+          "target": 100000000000,
+          "maximum": 200000000000,
+          "codec": "none"
+        },
+        "workspace": "/tmp/archive-planner-scaling-awyzcdoe/efu-50000-fixed-tree/workspace"
+      },
+      "measurement": {
+        "acquisition_seconds": 3.431084607997036,
+        "plan_seconds": 1.0643145139983972,
+        "acquisition_state": "COMPLETE",
+        "counts": {
+          "files": 50000,
+          "directories": 1126,
+          "logical_bytes": 2475402025000
+        },
+        "counts_match_fixture": true,
+        "plan_state": "READY",
+        "packages": 26,
+        "recorded_members": 51126,
+        "queries": {
+          "first_package_page": {
+            "seconds": 0.000705063997884281,
+            "rows_returned": 26,
+            "response_kind": "page"
+          },
+          "last_package_page": {
+            "seconds": 0.0005005060011171736,
+            "rows_returned": 26,
+            "response_kind": "page"
+          },
+          "package_detail": {
+            "seconds": 0.0005080459959572181,
+            "rows_returned": null,
+            "response_kind": "object"
+          },
+          "first_member_page": {
+            "seconds": 0.004848745003982913,
+            "rows_returned": 100,
+            "response_kind": "page"
+          }
+        },
+        "memory": {
+          "before_acquisition": {
+            "current_rss_bytes": 19812352,
+            "peak_rss_bytes": 19791872
+          },
+          "after_acquisition": {
+            "current_rss_bytes": 36851712,
+            "peak_rss_bytes": 37191680
+          },
+          "after_plan": {
+            "current_rss_bytes": 36937728,
+            "peak_rss_bytes": 37191680
+          },
+          "after_queries": {
+            "current_rss_bytes": 36962304,
+            "peak_rss_bytes": 37191680
+          }
+        },
+        "workspace_bytes": 24432642,
+        "workspace_definition": "Sum of regular-file logical sizes after Store connections close; not allocated blocks and not source/payload bytes."
+      },
+      "directory_cache_probe": {
+        "seconds": 0.03789888800383778,
+        "entries": 1126,
+        "path_characters": 35400,
+        "average_characters_per_directory": 31.438721136767317,
+        "maximum_path_characters": 33,
+        "python_cache_object_bytes": 202590,
+        "memory_before": {
+          "current_rss_bytes": 13729792,
+          "peak_rss_bytes": 15073280
+        },
+        "memory_after": {
+          "current_rss_bytes": 23281664,
+          "peak_rss_bytes": 23199744
+        },
+        "cache_limits": {
+          "max_entries": 8192,
+          "max_key_value_bytes": 8388608,
+          "accounted_key_value_bytes": 113094
+        },
+        "scope": "Explicitly visits every directory path in a separate fresh worker. Python dict/key/value getsizeof total is diagnostic object size, not an exclusive allocation or process-RSS measure. Does not measure InventoryBuilder.dirs separately."
+      }
+    },
+    {
+      "name": "efu-100000-fixed-tree",
+      "status": "COMPLETE",
+      "fixture": {
+        "name": "efu-100000-fixed-tree",
+        "mode": "efu",
+        "shape_name": "fixed_tree",
+        "files": 100000,
+        "input": "/tmp/archive-planner-scaling-awyzcdoe/efu-100000-fixed-tree/fixture.efu",
+        "expected_files": 100000,
+        "expected_directories": 1126,
+        "expected_bytes": 4953004050000,
+        "input_bytes": 8938816,
+        "input_sha256": "eb79cf410db67e76e898c6f614d62240b38c4a6830c7c9449a6e8a922b9cd73d",
+        "source_create_seconds": 0.2435112820021459,
+        "shape": "25 collections / 100 groups / 1,000 projects; fixed 1,126 directories including root; mixed suffixes; synthetic sizes of 1,000 to 100,000,999 bytes.",
+        "policy": {
+          "minimum": 10000000000,
+          "target": 100000000000,
+          "maximum": 200000000000,
+          "codec": "none"
+        },
+        "workspace": "/tmp/archive-planner-scaling-awyzcdoe/efu-100000-fixed-tree/workspace"
+      },
+      "measurement": {
+        "acquisition_seconds": 6.428691834000347,
+        "plan_seconds": 2.16530140699615,
+        "acquisition_state": "COMPLETE",
+        "counts": {
+          "files": 100000,
+          "directories": 1126,
+          "logical_bytes": 4953004050000
+        },
+        "counts_match_fixture": true,
+        "plan_state": "READY",
+        "packages": 26,
+        "recorded_members": 101126,
+        "queries": {
+          "first_package_page": {
+            "seconds": 0.0008361310028703883,
+            "rows_returned": 26,
+            "response_kind": "page"
+          },
+          "last_package_page": {
+            "seconds": 0.0006641829968430102,
+            "rows_returned": 26,
+            "response_kind": "page"
+          },
+          "package_detail": {
+            "seconds": 0.0003399030028958805,
+            "rows_returned": null,
+            "response_kind": "object"
+          },
+          "first_member_page": {
+            "seconds": 0.007844347004720476,
+            "rows_returned": 100,
+            "response_kind": "page"
+          }
+        },
+        "memory": {
+          "before_acquisition": {
+            "current_rss_bytes": 17620992,
+            "peak_rss_bytes": 17432576
+          },
+          "after_acquisition": {
+            "current_rss_bytes": 38215680,
+            "peak_rss_bytes": 38940672
+          },
+          "after_plan": {
+            "current_rss_bytes": 38326272,
+            "peak_rss_bytes": 38940672
+          },
+          "after_queries": {
+            "current_rss_bytes": 38363136,
+            "peak_rss_bytes": 38940672
+          }
+        },
+        "workspace_bytes": 48562178,
+        "workspace_definition": "Sum of regular-file logical sizes after Store connections close; not allocated blocks and not source/payload bytes."
+      },
+      "directory_cache_probe": {
+        "seconds": 0.023058143000525888,
+        "entries": 1126,
+        "path_characters": 35400,
+        "average_characters_per_directory": 31.438721136767317,
+        "maximum_path_characters": 33,
+        "python_cache_object_bytes": 202590,
+        "memory_before": {
+          "current_rss_bytes": 13725696,
+          "peak_rss_bytes": 15192064
+        },
+        "memory_after": {
+          "current_rss_bytes": 23277568,
+          "peak_rss_bytes": 23199744
+        },
+        "cache_limits": {
+          "max_entries": 8192,
+          "max_key_value_bytes": 8388608,
+          "accounted_key_value_bytes": 113094
+        },
+        "scope": "Explicitly visits every directory path in a separate fresh worker. Python dict/key/value getsizeof total is diagnostic object size, not an exclusive allocation or process-RSS measure. Does not measure InventoryBuilder.dirs separately."
+      }
+    },
+    {
+      "name": "filesystem-10000-files-2000-dirs",
+      "status": "COMPLETE",
+      "fixture": {
+        "name": "filesystem-10000-files-2000-dirs",
+        "mode": "filesystem",
+        "input": "/tmp/archive-planner-scaling-awyzcdoe/filesystem-10000-files-2000-dirs/source",
+        "expected_files": 10000,
+        "expected_directories": 2001,
+        "expected_bytes": 10240000,
+        "source_create_seconds": 0.268031494000752,
+        "filesystem": {
+          "path": "/tmp/archive-planner-scaling-awyzcdoe/filesystem-10000-files-2000-dirs/source",
+          "device": 39,
+          "block_size": 4096,
+          "fragment_size": 4096,
+          "mount": "/tmp",
+          "filesystem_type": "tmpfs"
+        },
+        "shape": "2,000 direct child directories, five 1 KiB files each; 10,000 files; recently created and cache-warm; no content hashing during scan.",
+        "policy": {
+          "minimum": 0,
+          "target": 100000000000,
+          "maximum": 200000000000,
+          "codec": "none"
+        },
+        "workspace": "/tmp/archive-planner-scaling-awyzcdoe/filesystem-10000-files-2000-dirs/workspace"
+      },
+      "measurement": {
+        "acquisition_seconds": 1.4284445049997885,
+        "plan_seconds": 0.22759999700065237,
+        "acquisition_state": "COMPLETE",
+        "counts": {
+          "files": 10000,
+          "directories": 2001,
+          "logical_bytes": 10240000
+        },
+        "counts_match_fixture": true,
+        "plan_state": "READY",
+        "packages": 2001,
+        "recorded_members": 12001,
+        "queries": {
+          "first_package_page": {
+            "seconds": 0.0009311150060966611,
+            "rows_returned": 100,
+            "response_kind": "page"
+          },
+          "last_package_page": {
+            "seconds": 0.0005369610007619485,
+            "rows_returned": 1,
+            "response_kind": "page"
+          },
+          "package_detail": {
+            "seconds": 0.00035501499951351434,
+            "rows_returned": null,
+            "response_kind": "object"
+          },
+          "first_member_page": {
+            "seconds": 0.00041318399598822,
+            "rows_returned": 5,
+            "response_kind": "page"
+          }
+        },
+        "memory": {
+          "before_acquisition": {
+            "current_rss_bytes": 17616896,
+            "peak_rss_bytes": 17432576
+          },
+          "after_acquisition": {
+            "current_rss_bytes": 28020736,
+            "peak_rss_bytes": 27869184
+          },
+          "after_plan": {
+            "current_rss_bytes": 29229056,
+            "peak_rss_bytes": 29179904
+          },
+          "after_queries": {
+            "current_rss_bytes": 29249536,
+            "peak_rss_bytes": 29179904
+          }
+        },
+        "workspace_bytes": 6828034,
+        "workspace_definition": "Sum of regular-file logical sizes after Store connections close; not allocated blocks and not source/payload bytes."
+      },
+      "directory_cache_probe": {
+        "seconds": 0.010935370999504812,
+        "entries": 2001,
+        "path_characters": 30000,
+        "average_characters_per_directory": 14.992503748125937,
+        "maximum_path_characters": 15,
+        "python_cache_object_bytes": 338805,
+        "memory_before": {
+          "current_rss_bytes": 13725696,
+          "peak_rss_bytes": 15192064
+        },
+        "memory_after": {
+          "current_rss_bytes": 17461248,
+          "peak_rss_bytes": 17301504
+        },
+        "cache_limits": {
+          "max_entries": 8192,
+          "max_key_value_bytes": 8388608,
+          "accounted_key_value_bytes": 168069
+        },
+        "scope": "Explicitly visits every directory path in a separate fresh worker. Python dict/key/value getsizeof total is diagnostic object size, not an exclusive allocation or process-RSS measure. Does not measure InventoryBuilder.dirs separately."
+      }
+    },
+    {
+      "name": "efu-30000-broad-directories",
+      "status": "COMPLETE",
+      "fixture": {
+        "name": "efu-30000-broad-directories",
+        "mode": "efu",
+        "shape_name": "broad",
+        "files": 30000,
+        "input": "/tmp/archive-planner-scaling-awyzcdoe/efu-30000-broad-directories/fixture.efu",
+        "expected_files": 30000,
+        "expected_directories": 30151,
+        "expected_bytes": 3840000,
+        "input_bytes": 1950040,
+        "input_sha256": "8e481a584ebc638d0c0eb3f7dfc72679664071daa534791ec6a616d03bdad02d",
+        "source_create_seconds": 0.05148355600249488,
+        "shape": "150 bucket directories, 200 single-file child directories per bucket; 30,000 files and 30,151 directories including root; root/bucket/directory hierarchy.",
+        "policy": {
+          "minimum": 10000000000,
+          "target": 100000000000,
+          "maximum": 200000000000,
+          "codec": "none"
+        },
+        "workspace": "/tmp/archive-planner-scaling-awyzcdoe/efu-30000-broad-directories/workspace"
+      },
+      "measurement": {
+        "acquisition_seconds": 2.9981336780037964,
+        "plan_seconds": 1.1693857349964674,
+        "acquisition_state": "COMPLETE",
+        "counts": {
+          "files": 30000,
+          "directories": 30151,
+          "logical_bytes": 3840000
+        },
+        "counts_match_fixture": true,
+        "plan_state": "READY",
+        "packages": 2,
+        "recorded_members": 60151,
+        "queries": {
+          "first_package_page": {
+            "seconds": 0.0009758029991644435,
+            "rows_returned": 2,
+            "response_kind": "page"
+          },
+          "last_package_page": {
+            "seconds": 0.0006199359995662235,
+            "rows_returned": 2,
+            "response_kind": "page"
+          },
+          "package_detail": {
+            "seconds": 0.0003499890008242801,
+            "rows_returned": null,
+            "response_kind": "object"
+          },
+          "first_member_page": {
+            "seconds": 0.014318974004709162,
+            "rows_returned": 100,
+            "response_kind": "page"
+          }
+        },
+        "memory": {
+          "before_acquisition": {
+            "current_rss_bytes": 17616896,
+            "peak_rss_bytes": 17432576
+          },
+          "after_acquisition": {
+            "current_rss_bytes": 40366080,
+            "peak_rss_bytes": 40169472
+          },
+          "after_plan": {
+            "current_rss_bytes": 40460288,
+            "peak_rss_bytes": 40300544
+          },
+          "after_queries": {
+            "current_rss_bytes": 40493056,
+            "peak_rss_bytes": 40431616
+          }
+        },
+        "workspace_bytes": 26271746,
+        "workspace_definition": "Sum of regular-file logical sizes after Store connections close; not allocated blocks and not source/payload bytes."
+      },
+      "directory_cache_probe": {
+        "seconds": 0.1492644539976027,
+        "entries": 8192,
+        "path_characters": 204119,
+        "average_characters_per_directory": 24.9168701171875,
+        "maximum_path_characters": 25,
+        "python_cache_object_bytes": 1883695,
+        "memory_before": {
+          "current_rss_bytes": 13729792,
+          "peak_rss_bytes": 15200256
+        },
+        "memory_after": {
+          "current_rss_bytes": 25387008,
+          "peak_rss_bytes": 25591808
+        },
+        "cache_limits": {
+          "max_entries": 8192,
+          "max_key_value_bytes": 8388608,
+          "accounted_key_value_bytes": 769367
+        },
+        "scope": "Explicitly visits every directory path in a separate fresh worker. Python dict/key/value getsizeof total is diagnostic object size, not an exclusive allocation or process-RSS measure. Does not measure InventoryBuilder.dirs separately."
+      }
+    },
+    {
+      "name": "efu-8192-deep-directories",
+      "status": "COMPLETE",
+      "fixture": {
+        "name": "efu-8192-deep-directories",
+        "mode": "efu",
+        "shape_name": "deep",
+        "files": 8192,
+        "input": "/tmp/archive-planner-scaling-awyzcdoe/efu-8192-deep-directories/fixture.efu",
+        "expected_files": 8192,
+        "expected_directories": 8225,
+        "expected_bytes": 1048576,
+        "input_bytes": 5656616,
+        "input_sha256": "602e24fd2861a74e699b967f7717c5063d3a251c2b8c90603342415866b8c75e",
+        "source_create_seconds": 0.08663142699515447,
+        "shape": "32 independent branches, each 256 nested directories with one 128-byte file at every level; 8,192 files / 8,225 directories including root; maximum 257 directory components.",
+        "policy": {
+          "minimum": 10000000000,
+          "target": 100000000000,
+          "maximum": 200000000000,
+          "codec": "none"
+        },
+        "workspace": "/tmp/archive-planner-scaling-awyzcdoe/efu-8192-deep-directories/workspace"
+      },
+      "measurement": {
+        "acquisition_seconds": 1.8501641269976972,
+        "plan_seconds": 0.38316639899858274,
+        "acquisition_state": "COMPLETE",
+        "counts": {
+          "files": 8192,
+          "directories": 8225,
+          "logical_bytes": 1048576
+        },
+        "counts_match_fixture": true,
+        "plan_state": "READY",
+        "packages": 2,
+        "recorded_members": 16417,
+        "queries": {
+          "first_package_page": {
+            "seconds": 0.0007563410035800189,
+            "rows_returned": 2,
+            "response_kind": "page"
+          },
+          "last_package_page": {
+            "seconds": 0.0008099129991023801,
+            "rows_returned": 2,
+            "response_kind": "page"
+          },
+          "package_detail": {
+            "seconds": 0.0003716810024343431,
+            "rows_returned": null,
+            "response_kind": "object"
+          },
+          "first_member_page": {
+            "seconds": 0.007020567005383782,
+            "rows_returned": 100,
+            "response_kind": "page"
+          }
+        },
+        "memory": {
+          "before_acquisition": {
+            "current_rss_bytes": 17608704,
+            "peak_rss_bytes": 17432576
+          },
+          "after_acquisition": {
+            "current_rss_bytes": 38637568,
+            "peak_rss_bytes": 38547456
+          },
+          "after_plan": {
+            "current_rss_bytes": 38862848,
+            "peak_rss_bytes": 38809600
+          },
+          "after_queries": {
+            "current_rss_bytes": 38883328,
+            "peak_rss_bytes": 38809600
+          }
+        },
+        "workspace_bytes": 6778882,
+        "workspace_definition": "Sum of regular-file logical sizes after Store connections close; not allocated blocks and not source/payload bytes."
+      },
+      "directory_cache_probe": {
+        "seconds": 0.038076825003372505,
+        "entries": 8192,
+        "path_characters": 5326248,
+        "average_characters_per_directory": 650.1767578125,
+        "maximum_path_characters": 1288,
+        "python_cache_object_bytes": 6579832,
+        "memory_before": {
+          "current_rss_bytes": 13729792,
+          "peak_rss_bytes": 15659008
+        },
+        "memory_after": {
+          "current_rss_bytes": 24133632,
+          "peak_rss_bytes": 23986176
+        },
+        "cache_limits": {
+          "max_entries": 8192,
+          "max_key_value_bytes": 8388608,
+          "accounted_key_value_bytes": 5891496
+        },
+        "scope": "Explicitly visits every directory path in a separate fresh worker. Python dict/key/value getsizeof total is diagnostic object size, not an exclusive allocation or process-RSS measure. Does not measure InventoryBuilder.dirs separately."
+      }
+    }
+  ],
+  "tested_source_sha256": {
+    "source/inventory.py": "c0df58aee4dcc278971b9d2b4fb4c7998bfd54af012f0da3fef221fc2de4eed7",
+    "source/store.py": "0ec09f290e7fb52e708730365a52b540a8fef81bb4a73d1ebf85aa8ef3bcb643",
+    "source/planning.py": "22fc87a018dde05859e781b35bccaaab80b720d1f83022685332fc577f0981db",
+    "source/application.py": "63b6e7f64a18b982b30872854d73837e0f767930f10aa27f62a258321575f774",
+    "source/path_cache.py": "0051eec89b7d0dc82e51c6a1e45f43665c497880ec555ce3c6ce30558cccc57c"
+  },
+  "environment": {
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "machine": "x86_64",
+    "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+    "sqlite": "3.53.1",
+    "cpu_model_reported": "AMD EPYC 9V74 80-Core Processor",
+    "logical_cpus_visible": 9,
+    "cpu_affinity_count": 9,
+    "filesystem": {
+      "path": "/tmp/archive-planner-scaling-awyzcdoe",
+      "device": 39,
+      "block_size": 4096,
+      "fragment_size": 4096,
+      "mount": "/tmp",
+      "filesystem_type": "tmpfs"
+    },
+    "isolation": "Fresh Python workers; shared host and uncontrolled concurrent load; no cold-cache flush."
+  },
+  "temporary_root_removed_after_run": "/tmp/archive-planner-scaling-awyzcdoe",
+  "temporary_root_exists_after_cleanup": false,
+  "elapsed_total_seconds": 23.0948061290037,
+  "source_unchanged_during_run": true,
+  "frozen_source_snapshot": {
+    "method": "Temporary copy of source/ and checkout bootstrap before any worker started; separate from concurrently edited development tree",
+    "path_removed_after_run": "/tmp/archive-planner-cache-code-_cic49vy",
+    "path_exists_after_cleanup": false
+  }
+}
