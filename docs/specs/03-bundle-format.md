@@ -1,10 +1,12 @@
 # 03 — Archive and evidence formats
 
-## Stable identifiers during the transition
+## Stable format identifiers
 
 The V2 product version does not rename stored formats: `AP20Archive/1`,
 `AP20Package/1`, `AP20Workspace/1`, `AP20Replica/1`, and related format 1 identifiers
-remain recognizable. `.ap20` is an evidence-transfer suffix, not an archive
+remain recognizable. The internal journal identifier
+`ArchivePlannerKitTransaction/1` also remains unchanged. `.ap20` is an
+evidence-transfer suffix, not an archive
 payload format. SQLite application ID `0x41503230`, user_version 1 remain in use.
 Compatibility means accepting valid supported data, not continuing to accept
 contradictory or malformed data that an earlier validator missed.
@@ -15,7 +17,11 @@ contradictory or malformed data that an earlier validator missed.
 referenced package receipts, manifests and payloads. New V2 sets additionally
 declare `human_manifest: "ARCHIVE.html"` and seal that file. Legacy sets without
 the declaration remain readable. A declared human manifest MUST exist and match
-its seal.
+its seal. New sets also declare directory-metadata dependencies and the full
+metadata-package inventory, including directory-only sources. Subset copies
+preserve absent dependency IDs so missing metadata is distinguishable from
+complete recovery. Older sets without these optional fields remain readable;
+metadata completeness can be unknown.
 
 **FMT-02.** SHA256SUMS is UTF-8, one lowercase SHA-256 and relative pathname per
 line. The kit validator rejects missing, duplicate, unexpected or malformed
@@ -61,13 +67,16 @@ for callers using the older aggregate field.
 
 **REC-02.** RESTORE.py is copied from the authoritative recovery module, imports
 no application modules, opens no application database and needs only Python's
-standard library plus external zstd for zstd payloads. Recovery must be exercised
+standard library on Python 3.8+, plus external zstd for zstd payloads. Standard-
+library sqlite3 maintains a temporary path index; the application database and
+its SQLite feature floor are not required. Recovery must be exercised
 with the original source and working database absent. Keep a separate external
-TAR extraction oracle for interoperability.
+TAR extraction oracle for interoperability. A valid sealed helper in an existing
+set MUST be preserved rather than silently replaced with a newer one.
 
 **REC-03.** Recovery creates a new output directory and publishes it without
-replacement after validation. On failure, preserve the owned partial directory
-and report it. The reader does not merge into existing trees.
+replacement after validation. On failure after partial creation, preserve the owned partial
+directory and report it. The reader does not merge into existing trees.
 
 ## Workspace transfer
 

@@ -8,11 +8,16 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
 import zipfile
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from scripts.release_support import extract_plain_tar, relative_name
 
 
 def verify(archive: Path) -> dict:
@@ -24,22 +29,25 @@ def verify(archive: Path) -> dict:
                     raise ValueError("ZIP CRC failure")
                 if len(z.namelist()) != len(set(z.namelist())):
                     raise ValueError("Duplicate ZIP member")
+                if (
+                    len(z.infolist()) > 10000
+                    or sum(info.file_size for info in z.infolist()) > 1024 * 1024 * 1024
+                ):
+                    raise ValueError("Distribution exceeds qualification extraction limits")
                 for info in z.infolist():
-                    name = Path(info.filename)
-                    if name.is_absolute() or ".." in name.parts or "\\" in info.filename:
-                        raise ValueError("Unsafe ZIP member")
-                    z.extract(info, work)
+                    target = work.joinpath(*relative_name(info.filename).parts)
+                    if info.is_dir():
+                        target.mkdir(parents=True, exist_ok=True)
+                        continue
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with z.open(info) as contents, target.open("xb") as output:
+                        shutil.copyfileobj(contents, output, 1024 * 1024)
                     permissions = (info.external_attr >> 16) & 0o777
-                    if permissions and not info.is_dir():
-                        (work / info.filename).chmod(permissions)
+                    if permissions:
+                        target.chmod(permissions & 0o755)
         else:
             with tarfile.open(archive) as tar:
-                names = set()
-                for entry in tar.getmembers():
-                    if entry.name in names or not (entry.isfile() or entry.isdir()):
-                        raise ValueError("Duplicate or unsupported TAR member")
-                    names.add(entry.name)
-                tar.extractall(work, filter="data")
+                extract_plain_tar(tar, work)
         roots = list(work.iterdir())
         if len(roots) != 1 or not roots[0].is_dir():
             raise ValueError("Expected one release root")
@@ -53,9 +61,9 @@ def verify(archive: Path) -> dict:
         }
         for line in (root / "SHA256SUMS").read_text(encoding="utf-8").splitlines():
             expected, name = line.split("  ", 1)
-            path = root / name
-            if not path.is_relative_to(root) or ".." in Path(name).parts or name in sealed:
+            if name in sealed:
                 raise ValueError("Unsafe seal path")
+            path = root.joinpath(*relative_name(name).parts)
             if len(expected) != 64 or any(c not in "0123456789abcdef" for c in expected):
                 raise ValueError("Invalid seal hash")
             if hashlib.sha256(path.read_bytes()).hexdigest() != expected:

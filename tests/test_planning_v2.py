@@ -149,7 +149,7 @@ class PlanningV2Tests(Fixture):
             result["media"][0]["set_allowance_bytes"], capacity.COPY_SET_ALLOWANCE_BYTES
         )
 
-    def test_fitting_media_and_exact_copy_selection_report_missing_metadata(self):
+    def test_separated_metadata_does_not_make_an_incomplete_payload_group_fit(self):
         self.file("Project/payload.bin", b"x" * 65536)
         plan = self.plan()
         rows = self.package_rows(plan)
@@ -164,17 +164,17 @@ class PlanningV2Tests(Fixture):
             },
         ]
         allocated = self.app.call("allocate", {"plan_id": plan["id"], "media": media})
-        self.assertEqual(allocated["unallocated"], [])
+        self.assertEqual(allocated["unallocated"], [payload["id"]])
         self.assertFalse(allocated["metadata_dependencies_complete"])
         first, second = allocated["media"]
-        self.assertEqual(first["packages"], [payload["id"]])
-        self.assertEqual(second["packages"], [metadata["id"]])
-        self.assertEqual(first["required_metadata_package_ids"], [metadata["id"]])
-        self.assertEqual(first["missing_metadata_package_ids"], [metadata["id"]])
-        self.assertEqual(first["metadata_completeness"], "missing")
+        self.assertEqual(first["packages"], [metadata["id"]])
+        self.assertEqual(second["packages"], [])
+        self.assertEqual(first["required_metadata_package_ids"], [])
+        self.assertEqual(first["missing_metadata_package_ids"], [])
+        self.assertEqual(first["metadata_completeness"], "complete")
         self.assertEqual(second["missing_metadata_package_ids"], [])
-        self.assertEqual(first["used"], media[0]["capacity"])
-        self.assertEqual(second["used"], media[1]["capacity"])
+        self.assertEqual(first["used"], capacity.COPY_SET_ALLOWANCE_BYTES + sizes[metadata["id"]])
+        self.assertEqual(second["used"], 0)
 
         built = self.build(plan)
         destination = self.app.call(

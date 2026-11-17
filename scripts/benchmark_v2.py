@@ -61,7 +61,7 @@ def filesystem_facts(path):
             left, right = line.split(" - ", 1)
             fields = left.split()
             mount = Path(fields[4].replace("\\040", " "))
-            if resolved.is_relative_to(mount) and (
+            if (resolved == mount or mount in resolved.parents) and (
                 best is None or len(str(mount)) > len(best["mount"])
             ):
                 best = {"mount": str(mount), "filesystem_type": right.split()[0]}

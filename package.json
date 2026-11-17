@@ -1,0 +1,11 @@
+{
+  "name": "archivist-development-checks",
+  "private": true,
+  "scripts": {
+    "check:syntax": "node scripts/check_js_syntax.cjs",
+    "test": "node tests/gui_state.test.cjs && node tests/browser_capabilities.test.cjs"
+  },
+  "devDependencies": {
+    "acorn": "8.19.0"
+  }
+}

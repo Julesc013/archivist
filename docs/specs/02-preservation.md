@@ -12,7 +12,9 @@ unsupported attributes and nonportable/colliding names according to the scanner'
 explicit issue/exclusion ledger. Never silently dereference a link, rename a
 collision or replace one file with a normalized equivalent. Restore preflight
 rejects unsafe traversal, absolute paths, file-as-parent conflicts and case/
-Unicode collisions. Windows additionally rejects invalid and reserved names.
+Unicode collisions. Windows additionally rejects invalid and reserved names. Verified macOS system
+alias normalization is a root-path compatibility rule, not permission to follow
+links within a source or restore tree.
 
 **PRES-03.** This profile does not preserve ACLs, xattrs, NTFS ADS, EFS, link
 relationships, sparse allocation, ownership semantics or complete filesystem
@@ -30,7 +32,10 @@ directory metadata may reside in separate directory-only packages. A complete
 metadata-preserving recovery selection consists of chosen payload packages plus
 the relevant source's directory-metadata packages. A complete archive set
 contains both. Explicit package selection selects exactly the listed IDs;
-manifest search proposes the metadata dependencies as additional selected IDs.
+manifest search proposes available metadata dependencies as additional selected
+IDs and reports missing/unknown dependencies. Media allocation includes and
+charges the complete metadata dependency closure on every assigned medium.
+Physical metadata copies do not duplicate logical plan membership.
 
 **PRES-06.** Whole-package recovery can extract additional files beyond a search
 match. The interface MUST say so. Search verifies catalogue/manifest evidence,

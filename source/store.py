@@ -6,6 +6,7 @@ import os
 import sqlite3
 import sys
 from pathlib import Path
+from .compat import configure_sqlite, require_runtime
 from .path_cache import PathCache
 from .util import APP_ID, canonical, no_links, now, require, uid, atomic_json, json_read
 
@@ -38,9 +39,7 @@ def config_directory() -> Path:
     if os.environ.get("ARCHIVIST_CONFIG_HOME"):
         return Path(os.environ["ARCHIVIST_CONFIG_HOME"]).expanduser()
     if sys.platform == "win32":
-        return (
-            Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local")) / "Archivist"
-        )
+        return Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local")) / "Archivist"
     if sys.platform == "darwin":
         return Path.home() / "Library/Application Support/Archivist"
     return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "archivist"
@@ -89,6 +88,7 @@ def remember_workspace(path):
 
 class Store:
     def __init__(self, workspace: str | Path, create=True):
+        require_runtime()
         self.root = no_links(Path(workspace), missing_ok=create)
         if create:
             self.root.mkdir(parents=True, exist_ok=True)
@@ -97,27 +97,40 @@ class Store:
         require(not new or create, "WORKSPACE_MISSING", "Workspace database not found")
         require(not path.is_symlink(), "DATABASE_LINK", "Database cannot be a symbolic link")
         self.db = sqlite3.connect(path, timeout=10)
-        self.db.row_factory = sqlite3.Row
-        self.db.execute("PRAGMA foreign_keys=ON")
-        self.db.execute("PRAGMA trusted_schema=OFF")
-        self.db.execute("PRAGMA busy_timeout=10000")
-        self.db.execute("PRAGMA temp_store=FILE")
-        self.db.execute("PRAGMA cache_size=-8192")
-        if new:
-            self.db.executescript(SCHEMA)
-            self.db.execute(f"PRAGMA application_id={APP_ID}")
-            self.db.execute("PRAGMA user_version=1")
-            self.db.execute("INSERT INTO meta VALUES ('collection_id',?)", (uid("collection"),))
-            self.db.execute("INSERT INTO meta VALUES ('created',?)", (now(),))
-            self.db.commit()
-        require(
-            self.db.execute("PRAGMA application_id").fetchone()[0] == APP_ID
-            and self.db.execute("PRAGMA user_version").fetchone()[0] == 1,
-            "WORKSPACE_VERSION",
-            "Not a supported workspace; import an evidence bundle or use explicit migration for older evidence",
-        )
-        self.db.execute("PRAGMA journal_mode=WAL")
-        self.db.execute("PRAGMA synchronous=FULL")
+        try:
+            self.db.row_factory = sqlite3.Row
+            configure_sqlite(self.db)
+            self.db.execute("PRAGMA busy_timeout=10000")
+            self.db.execute("PRAGMA temp_store=FILE")
+            self.db.execute("PRAGMA cache_size=-8192")
+            if new:
+                self.db.executescript(SCHEMA)
+                self.db.execute(f"PRAGMA application_id={APP_ID}")
+                self.db.execute("PRAGMA user_version=1")
+                self.db.execute("INSERT INTO meta VALUES ('collection_id',?)", (uid("collection"),))
+                self.db.execute("INSERT INTO meta VALUES ('created',?)", (now(),))
+                self.db.commit()
+            require(
+                self.db.execute("PRAGMA application_id").fetchone()[0] == APP_ID
+                and self.db.execute("PRAGMA user_version").fetchone()[0] == 1,
+                "WORKSPACE_VERSION",
+                "Not a supported workspace; import an evidence bundle or use explicit migration for older evidence",
+            )
+            mode = self.db.execute("PRAGMA journal_mode=WAL").fetchone()
+            require(
+                mode and str(mode[0]).lower() == "wal",
+                "SQLITE_JOURNAL",
+                "Workspace filesystem/runtime did not enable the required WAL journal",
+            )
+            self.db.execute("PRAGMA synchronous=FULL")
+            require(
+                self.db.execute("PRAGMA synchronous").fetchone()[0] == 2,
+                "SQLITE_DURABILITY",
+                "SQLite did not confirm FULL synchronization",
+            )
+        except BaseException:
+            self.db.close()
+            raise
         self._paths: PathCache[int, str] = PathCache()
 
     def close(self):

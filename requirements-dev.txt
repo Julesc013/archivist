@@ -1,4 +1,6 @@
 # Tested local build/lint toolchain; not application runtime dependencies.
 ruff==0.17.5
-setuptools==84.2.1
-wheel==0.48.0
+setuptools==75.3.4; python_version < "3.9"
+setuptools==84.2.1; python_version >= "3.9"
+wheel==0.45.1; python_version < "3.9"
+wheel==0.48.0; python_version >= "3.9"

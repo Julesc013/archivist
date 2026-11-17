@@ -119,12 +119,14 @@ def find_members(
     require(isinstance(query, str) and 0 < len(query) <= 4096, "QUERY", "Enter a path or name")
     require(mode in ("substring", "subtree"), "QUERY_MODE", "Use substring or subtree")
     require(1 <= limit <= 1000 and offset >= 0, "PAGE", "Invalid page range")
-    root, index, refs = recovery.inspect(bundle)
+    p = progress or Progress()
+    p.check()
+    root, index, refs = recovery.inspect(bundle, progress=p.recovery_callback())
     needle = query.casefold() if mode == "substring" else query.rstrip("/")
     if mode == "subtree":
         recovery.parts(needle)
-    p = progress or Progress()
     p.phase("Search archive manifests", len(refs), "packages")
+    p.set_overall(0, len(refs), "searched packages")
     rows: list[dict[str, Any]] = []
     matched: set[str] = set()
     metadata: dict[str, set[str]] = {}
@@ -132,7 +134,11 @@ def find_members(
     total = 0
     for ordinal, ref in enumerate(refs, 1):
         p.check()
-        receipt, _, manifest = recovery.validate_receipt(root, ref, hash_payload=False)
+        p.set_package(ref["package_id"], ordinal, len(refs))
+        receipt, _, manifest = recovery.validate_receipt(
+            root, ref, progress=p.recovery_callback(), hash_payload=False
+        )
+        p.phase("Search archive manifest", receipt["member_count"], "members")
         count = amount = 0
         directories_only = True
         package_namespaces: set[str] = set()
@@ -161,7 +167,7 @@ def find_members(
                 total += 1
                 matched.add(ref["package_id"])
             if count % 1000 == 0:
-                p.check()
+                p.update(count, row["name"])
         recovery.check(
             count == receipt["member_count"] and amount == receipt["logical_bytes"],
             "Manifest counts differ from receipt",
@@ -170,8 +176,10 @@ def find_members(
             for namespace in package_namespaces:
                 metadata.setdefault(namespace, set()).add(ref["package_id"])
         namespaces_by_package[ref["package_id"]] = package_namespaces
-        p.update(ordinal)
+        p.update(count)
+        p.set_overall(ordinal, len(refs), "searched packages")
     selection = metadata_selection(index, matched, namespaces_by_package, metadata)
+    p.set_package(None)
     return {
         "query": query,
         "mode": mode,

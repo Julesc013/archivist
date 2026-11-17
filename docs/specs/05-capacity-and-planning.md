@@ -39,12 +39,19 @@ up to the whole-group ceiling; this does not merge every separate top-level
 project. Reasons/anchors/policy remain inspectable. Manual edits preserve
 exact-once membership and lineage.
 
-**PACK-03.** Logical membership is exact once; physical replica placement may
-need directory metadata on more than one medium. Current allocation does not
-automatically duplicate these dependencies. It MUST not promise complete
-metadata-preserving subtree recovery on every individual allocated medium.
-Allocation, copy preflight and search report required metadata as available,
-missing or unknown. These diagnostics do not silently expand an exact selection.
+**PACK-03.** Logical membership is exact once. Allocation places complete
+payload groups: each payload plus every directory-metadata package for its
+source observation. Metadata shared within a medium is charged once; another
+medium that needs it receives and is charged for another physical copy. Atomic
+fit checks include every payload, manifest, receipt and control-file limit. A
+group whose closure cannot fit remains unallocated; uncovered metadata-only
+packages may be placed independently.
+
+The returned per-medium package list is the concrete complete copy selection.
+Physical-replication fields explain metadata copy counts and additional bytes;
+logical membership remains unchanged. Explicit copy/verify/restore selections
+remain exact. Diagnostics describe required metadata as available, missing or
+unknown without silently expanding a deliberately exact selection.
 
 **PERF-01.** Report workload, interpreter, filesystem, scale and phase with every
 benchmark. Small fixtures do not establish million-entry memory bounds or tape

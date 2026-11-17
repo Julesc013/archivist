@@ -48,7 +48,7 @@ def write_catalogue(root: Path, index: dict, *, output_root: Path | None = None)
             "<strong>Build:</strong> <code>" + esc(index.get("build_id", "unknown")) + "</code></p>"
         )
         out.write(
-            "<h2>Verify and recover</h2><p>With Python 3.12 or newer, run these commands from this folder. Install the zstd command when .tar.zst payloads are present.</p>"
+            "<h2>Verify and recover</h2><p>Current Archivist readers support Python 3.8 or newer; a preserved older reader keeps its documented requirement. Run these commands from this folder. Install the zstd command when .tar.zst payloads are present.</p>"
         )
         out.write(
             "<pre><code>python RESTORE.py .\npython RESTORE.py . --to NEW_DIRECTORY</code></pre>"

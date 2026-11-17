@@ -30,10 +30,8 @@ class RecoveryV2Tests(Fixture):
         if index.get("human_manifest") == "ARCHIVE.html":
             names.append("ARCHIVE.html")
         names.extend(ref["receipt"] for ref in index["packages"])
-        (root / "SHA256SUMS").write_text(
-            "".join(hash_file(root / name) + "  " + name + "\n" for name in names),
-            encoding="utf-8",
-            newline="\n",
+        (root / "SHA256SUMS").write_bytes(
+            "".join(hash_file(root / name) + "  " + name + "\n" for name in names).encode("utf-8")
         )
 
     def tar_bytes(self, name="safe.txt", data=b"x", mode=0o600, mtime=0):

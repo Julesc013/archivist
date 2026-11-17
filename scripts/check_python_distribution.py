@@ -27,7 +27,10 @@ import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ASSETS = ("app.css", "app.js", "index.html")
+sys.path.insert(0, str(ROOT))
+from scripts.release_support import extract_plain_tar
+
+ASSETS = ("app.css", "app.js", "bootstrap.js", "index.html")
 
 
 def check(condition, message):
@@ -100,6 +103,12 @@ def build_python_artifacts(root, output):
                 "*.egg-info",
                 "build",
                 "dist",
+                "repeat-dist",
+                "node_modules",
+                "python-distribution-check",
+                "browser-validation",
+                "release-inputs",
+                "release-assets",
             ),
         )
         script = """
@@ -181,7 +190,7 @@ def extract_sdist(path, destination):
             )
             roots.add(relative.parts[0])
         check(len(roots) == 1, "Source distribution must have one root directory")
-        archive.extractall(destination, filter="data")
+        extract_plain_tar(archive, destination)
     root = destination / roots.pop()
     for name in (
         "archivist.py",
@@ -205,11 +214,11 @@ def qualify(wheel_path, sdist_path, report_directory):
             "raise RuntimeError('The unrelated working directory was imported')\n", encoding="utf-8"
         )
         environment = working / "installed-environment"
-        venv.EnvBuilder(with_pip=True).create(environment)
+        # POSIX standalone Python builds can locate libpython relative to their
+        # executable. Preserve that relationship rather than copying the binary.
+        venv.EnvBuilder(with_pip=True, symlinks=os.name != "nt").create(environment)
         python = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-        console = environment / (
-            "Scripts/archivist.exe" if os.name == "nt" else "bin/archivist"
-        )
+        console = environment / ("Scripts/archivist.exe" if os.name == "nt" else "bin/archivist")
         installed = execute(
             [python, "-I", "-m", "pip", "install", "--no-index", "--no-deps", wheel_path], unrelated
         )
@@ -226,16 +235,17 @@ def qualify(wheel_path, sdist_path, report_directory):
             "Direct console launcher differs from isolated invocation",
         )
         probe = """
-from importlib import metadata, resources
+from importlib import metadata
 import hashlib, json, sys
 from pathlib import Path
 import archivist
 from archivist import recovery, web
 module = Path(archivist.__file__).resolve()
-assert sys.flags.isolated and module.is_relative_to(Path(sys.prefix).resolve())
+assert sys.flags.isolated
+module.relative_to(Path(sys.prefix).resolve())
 assets = {}
-for name in ('app.css','app.js','index.html'):
-    content = resources.files('archivist').joinpath('static',name).read_bytes()
+for name in ('app.css','app.js','bootstrap.js','index.html'):
+    content = module.parent.joinpath('static',name).read_bytes()
     assert content and (web.STATIC/name).read_bytes() == content
     assets[name] = {'bytes':len(content),'sha256':hashlib.sha256(content).hexdigest()}
 print(json.dumps({'module':str(module),'prefix':sys.prefix,'isolated':bool(sys.flags.isolated),
@@ -419,7 +429,7 @@ print(json.dumps({'module':str(module),'prefix':sys.prefix,'isolated':bool(sys.f
             "sdist_rebuilt_wheel_contents_equal": True,
             "limits": [
                 "Host-platform checks only; no native Windows/macOS qualification",
-                "Static assets read through importlib.resources; no browser rendering claim",
+                "Installed static assets checked as package files; no browser rendering claim",
                 "Plain TAR fixture; no tape device or hardware qualification",
                 "Distribution byte reproducibility is not asserted by this checker",
             ],

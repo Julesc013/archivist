@@ -1,9 +1,10 @@
-include archivist.py README.md CHANGELOG.md LICENSE THIRD-PARTY.md START-HERE.txt
+include archivist.py README.md CHANGELOG.md TODO.md ROADMAP.md AGENTS.md LICENSE THIRD-PARTY.md START-HERE.txt
 include CONTRIBUTING.md SECURITY.md pyproject.toml
-include requirements-dev.txt
+include requirements-dev.txt requirements-browser.txt package.json package-lock.json .gitattributes .gitignore
 recursive-include source *.py *.html *.css *.js
 recursive-include launchers *.sh *.command *.cmd *.desktop
-recursive-include scripts *.py *.js
+recursive-include scripts *.py *.js *.cjs
+recursive-include .github *.yml *.md
 recursive-include docs *.md *.json *.txt
 recursive-include tests *.py *.cjs *.json *.jsonl *.txt *.sqlite *.gz *.log *.html
 recursive-include examples *.json

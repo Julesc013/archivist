@@ -1,6 +1,6 @@
 # Sources and evidence
 
-External references were checked on2026-11-17 where used in the V2 review.
+External references were checked on 2026-11-17 where used in the V2 review.
 Source inspection and retained test/benchmark JSON are the primary evidence for
 claims about this implementation. External documentation does not establish
 that this application satisfies a specification or has passed a hardware test.
@@ -8,7 +8,10 @@ that this application satisfies a specification or has passed a hardware test.
 | Topic | Primary reference |
 |---|---|
 | Semantic Versioning | https://semver.org/ |
-| Supported Python releases | https://www.python.org/downloads/ |
+| Python release/security status | https://devguide.python.org/versions/ |
+| SQLite trusted-schema introduction | https://www.sqlite.org/releaselog/3_31_0.html |
+| SQLite safety settings | https://www.sqlite.org/pragma.html |
+| Windows DirEntry identity fields | https://docs.python.org/3.12/library/os.html#os.DirEntry.stat |
 | Package-to-directory mapping | https://setuptools.pypa.io/en/latest/references/keywords.html |
 | TAR compression/multi-volume limit | https://www.gnu.org/software/tar/manual/html_node/gzip.html |
 | fpart directory/file planning | https://www.fpart.org/fpart/ |
@@ -22,8 +25,9 @@ that this application satisfies a specification or has passed a hardware test.
 Competitor claims are deliberately limited: directory packing is not unique to
 this project; DAR is not proprietary; backup suites differ in formats/recovery
 dependencies; ordinary compressed GNU tar does not become a multi-volume stream
-by adding `-M`; LTFS still has index overhead. The product's proposed value is
+by adding `-M`; LTFS still has index overhead. The product's intended value is
 an understandable local workflow and explicit recovery evidence, not a proven
 claim that all alternatives fail.
 
-Naming sources and negative-search limits are recorded separately in NAMING.md.
+The chosen identity is recorded in [NAMING.md](NAMING.md). Earlier naming sources
+and negative-search limits remain in the linked historical research.

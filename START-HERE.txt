@@ -1,18 +1,26 @@
-ARCHIVE PLANNER 2.0.0-alpha.1
+ARCHIVIST 2.0.0
 
-Working product name. Read README.md before archiving valuable data.
-Python 3.12+ is required. No third-party Python packages are needed to run.
+Repository: https://github.com/Julesc013/archivist
+Read README.md before archiving valuable data.
+
+Python 3.8 or later is required. Prefer a maintained Python release.
+The application requires its linked SQLite library to be 3.31 or later and
+checks required capabilities. No third-party Python packages are required.
 Zstandard archives additionally need the zstd executable.
 
 Windows: launchers\GUI.cmd or launchers\CLI.cmd
 Linux:   launchers/GUI.sh or launchers/CLI.sh
-macOS:   launchers/GUI.command or launchers/CLI.command (native qualification open)
+macOS:   launchers/GUI.command or launchers/CLI.command
 CLI:     python3 archivist.py --help
+Check:   python3 archivist.py doctor
 
 Keep sources, evidence workspace, staging, replicas and restore output separate.
 Choose --backend filesystem explicitly if you do not want Everything on Windows.
 New restore output must not already exist.
 
-This alpha is not physical-tape qualification. See docs/validation/README.md.
-The complete source, specifications, tests and build scripts are included.
+The browser interface has capability diagnostics and a CLI fallback.
+Use File > Quit service to stop it. Closing a tab does not cancel a running job.
 
+Current qualification: docs/validation/README.md
+The mounted-LTFS adapter remains experimental; disk tests are not tape tests.
+The complete source, specifications, tests and build scripts are included.

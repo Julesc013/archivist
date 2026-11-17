@@ -1,59 +1,164 @@
-name: tests and development builds
+name: qualification and release
+
 on: [push, pull_request, workflow_dispatch]
+
 permissions:
   contents: read
+
+concurrency:
+  group: archivist-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   core:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python: ['3.12', '3.13', '3.14']
+        os: [ubuntu-24.04, windows-2022, macos-15-intel]
+        python: ['3.8', '3.12', '3.14']
+        exclude:
+          - {os: ubuntu-24.04, python: '3.8'}
+        include:
+          - {os: ubuntu-22.04, python: '3.8'}
+          - {os: ubuntu-24.04, python: '3.9'}
+          - {os: ubuntu-24.04, python: '3.10'}
+          - {os: ubuntu-24.04, python: '3.11'}
+          - {os: ubuntu-24.04, python: '3.13'}
+          - {os: windows-2022, python: '3.9'}
+          - {os: windows-2022, python: '3.10'}
+          - {os: windows-2022, python: '3.11'}
+          - {os: windows-2022, python: '3.13'}
+          - {os: macos-26, python: '3.12'}
+          - {os: macos-26, python: '3.14'}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: ${{ matrix.python }}
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '24'
           package-manager-cache: false
-      - name: Install optional codec for Linux tests
+      - name: Install optional codec on Linux
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install --yes zstd
-      - run: python scripts/run_tests.py --json-out native-validation.json
+      - run: python scripts/run_tests.py --quiet --json-out native-validation.json
       - run: node tests/gui_state.test.cjs
-      - uses: actions/upload-artifact@v7
+      - run: node tests/browser_capabilities.test.cjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: tests-${{ matrix.os }}-${{ matrix.python }}
           path: native-validation.json
           if-no-files-found: error
+
   quality-and-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
       - run: python -m pip install -r requirements-dev.txt
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run check:syntax
       - run: ruff check source scripts tests archivist.py
       - run: ruff format --check source scripts tests archivist.py
       - run: python scripts/build_release.py --output dist
+      - run: python scripts/build_release.py --output repeat-dist
+      - name: Compare independent portable builds
+        run: |
+          python -c 'from pathlib import Path; a=Path("dist"); b=Path("repeat-dist"); assert all(p.read_bytes()==(b/p.name).read_bytes() for p in a.iterdir())'
       - run: python scripts/check_release.py dist/*.zip dist/*.tar.gz --json-out packaging-validation.json
-      - run: python -c 'import setuptools.build_meta as b; b.build_wheel("dist"); b.build_sdist("dist")'
-      - run: python scripts/check_python_distribution.py --wheel dist/*.whl --sdist dist/archivist_archive-*.tar.gz --output python-distribution-check
-      - uses: actions/upload-artifact@v7
+      - run: python scripts/check_python_distribution.py --build --output python-distribution-check
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: development-distributions
+          name: qualified-distributions
           path: |
             dist/
             packaging-validation.json
-            python-distribution-check/qualification.json
+            python-distribution-check/
           if-no-files-found: error
 
-# Definitions are not qualification evidence until these jobs actually run.
-# This workflow never publishes a package, tags a release or accesses tape hardware.
+  python-floor-build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.8'
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python scripts/check_python_distribution.py --build --output python-distribution-check
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: python38-distribution-proof
+          path: python-distribution-check/
+          if-no-files-found: error
+
+  browser:
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chromium, firefox, webkit]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-browser.txt
+      - run: python -m playwright install --with-deps ${{ matrix.engine }}
+      - run: python scripts/check_gui.py --browser ${{ matrix.engine }} --output browser-validation/native
+      - name: Exercise optional dialog fallback
+        if: matrix.engine == 'chromium'
+        run: python scripts/check_gui.py --browser chromium --force-fallback-dialog --output browser-validation/fallback
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: browser-${{ matrix.engine }}
+          path: browser-validation/
+          if-no-files-found: error
+
+  release:
+    needs: [core, quality-and-build, python-floor-build, browser]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - name: Collect this commit's qualified distributions and evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --dir release-inputs
+      - name: Prepare sealed release assets
+        run: python scripts/prepare_release.py --inputs release-inputs --output release-assets --commit "$GITHUB_SHA" --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+      - name: Publish stable release without replacement
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(python archivist.py --version)"
+          if git rev-parse --verify "refs/tags/v$version" >/dev/null 2>&1; then
+            echo "Refusing to replace existing release tag v$version" >&2
+            exit 1
+          fi
+          gh release create "v$version" release-assets/* --target "$GITHUB_SHA" --title "Archivist $version" --notes-file release-notes.md

@@ -1,6 +1,7 @@
 """GUI service contracts and terminal progress regression boundaries."""
 
 import json
+import concurrent.futures
 import threading
 import time
 import unittest
@@ -11,9 +12,102 @@ from unittest import mock
 from test_core import Fixture
 from archivist.progress import Progress
 from archivist.web import Tasks, make_server
+from archivist.util import Problem
 
 
 class ProgressLifecycleTests(unittest.TestCase):
+    def test_failed_observer_is_disabled_without_changing_work_or_cancellation(self):
+        observer = mock.Mock(side_effect=RuntimeError("x" * 1000))
+        progress = Progress(observer)
+        progress.phase("Build", total=100, unit="bytes")
+        progress.update(50, "file")
+        progress.check()
+        self.assertIsNone(progress.callback)
+        observer.assert_called_once()
+        warnings = [
+            event
+            for event in progress.state()["events"]
+            if event["code"] == "PROGRESS_OBSERVER_FAILED"
+        ]
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(len(warnings[0]["message"]), 500)
+        progress.cancelled.set()
+        with self.assertRaises(Problem) as error:
+            progress.update(51)
+        self.assertEqual(error.exception.code, "CANCELLED")
+
+    def test_repeated_reader_phase_resets_total_and_path_for_new_objects(self):
+        progress = Progress()
+        reader = progress.recovery_callback()
+        reader("Hash object", 0, 100, "first")
+        reader("Hash object", 50, 100, "first")
+        reader("Hash object", 0, 200, "second")
+        state = progress.state()
+        self.assertEqual((state["done"], state["total"], state["path"]), (0, 200, "second"))
+        self.assertEqual(len([event for event in state["events"] if event["code"] == "PHASE"]), 2)
+        progress.phase("Publish")
+        self.assertEqual(progress.state()["path"], "")
+
+    def test_job_package_scope_is_separate_from_step_and_returned_by_value(self):
+        progress = Progress()
+        progress.set_overall(1, 3, "built and verified packages")
+        progress.set_package("P000002", 2, 3)
+        progress.phase("Hash", 1024, "bytes")
+        progress.update(512)
+        state = progress.state()
+        self.assertEqual(state["overall"]["done"], 1)
+        self.assertEqual(state["package"]["index"], 2)
+        self.assertEqual(state["done"], 512)
+        state["overall"]["done"] = 99
+        self.assertEqual(progress.state()["overall"]["done"], 1)
+
+    def test_cancelling_a_finished_task_does_not_rewrite_its_progress(self):
+        class ImmediateApplication:
+            def call(self, action, arguments, progress):
+                return {"complete": True}
+
+        tasks = Tasks(ImmediateApplication())
+        try:
+            ident = tasks.submit("scan", {})
+            tasks.items[ident]["future"].result(timeout=2)
+            before = tasks.list(ident)[0]
+            self.assertFalse(tasks.cancel(ident)["cancel_requested"])
+            self.assertEqual(tasks.list(ident)[0], before)
+        finally:
+            tasks.close()
+
+    def test_close_cancels_queued_futures_and_finishes_their_records(self):
+        entered, release = threading.Event(), threading.Event()
+
+        class WaitingApplication:
+            def call(self, action, arguments, progress):
+                entered.set()
+                if not release.wait(timeout=5):
+                    raise RuntimeError("Test worker was not released")
+                progress.check()
+
+        tasks = Tasks(WaitingApplication())
+        closer = None
+        try:
+            tasks.submit("scan", {})
+            self.assertTrue(entered.wait(timeout=2))
+            queued = tasks.submit("scan", {})
+            closer = threading.Thread(target=tasks.close)
+            closer.start()
+            with self.assertRaises(concurrent.futures.CancelledError):
+                tasks.items[queued]["future"].result(timeout=2)
+            record = tasks.list(queued)[0]
+            self.assertEqual(record["state"], "CANCELLED")
+            self.assertTrue(record["progress"]["finished"])
+            self.assertIn("completed", record)
+        finally:
+            release.set()
+            if closer:
+                closer.join(timeout=3)
+            else:
+                tasks.close()
+        self.assertFalse(closer.is_alive())
+
     def test_terminal_timing_is_frozen_and_finish_is_idempotent(self):
         with mock.patch("archivist.progress.time.monotonic", return_value=100) as clock:
             progress = Progress()

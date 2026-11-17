@@ -22,6 +22,8 @@ class Progress:
         self.samples = deque(maxlen=100)
         self.events = deque(maxlen=200)
         self.last_emit = 0.0
+        self.overall = None
+        self.package = None
 
     def check(self):
         if self.cancelled.is_set():
@@ -36,9 +38,53 @@ class Progress:
             if self.finished is None:
                 self.finished = time.monotonic()
 
+    def set_overall(self, done, total=None, unit="packages"):
+        """Publish known job-level counts separately from active-step counters."""
+        with self.lock:
+            self.overall = {"done": done, "total": total, "unit": unit}
+        self.emit(True)
+
+    def set_package(self, package_id, index=None, total=None):
+        """Identify the current package; index is one-based when known."""
+        with self.lock:
+            self.package = (
+                {"id": package_id, "index": index, "total": total}
+                if package_id is not None
+                else None
+            )
+        self.emit(True)
+
+    def recovery_callback(self):
+        """Adapt standalone recovery notifications without retaining the reader.
+
+        A repeated phase can start a new object with a different size. Reset the
+        step in that case, even when both objects initially report zero bytes.
+        """
+        previous = [None, None]
+
+        def update(name, done, total, path):
+            self.check()
+            with self.lock:
+                restart = (
+                    previous[0] != name
+                    or self.name != name
+                    or self.total != total
+                    or done < self.done
+                    or (done == 0 and previous[1] != path)
+                )
+            if restart:
+                self.phase(
+                    name, total, "bytes" if total is not None and name != "Check paths" else "items"
+                )
+            previous[:] = [name, path]
+            self.update(done, path)
+
+        return update
+
     def phase(self, name, total=None, unit="items"):
         with self.lock:
             self.name, self.done, self.total, self.unit = name, 0, total, unit
+            self.path = ""
             self.phase_started = self.changed = time.monotonic()
             self.samples.clear()
             self.samples.append((self.changed, 0))
@@ -90,14 +136,40 @@ class Progress:
                 "path": self.path,
                 "cancel_requested": self.cancelled.is_set(),
                 "finished": self.finished is not None,
+                "overall": dict(self.overall) if self.overall is not None else None,
+                "package": dict(self.package) if self.package is not None else None,
                 "events": list(self.events),
             }
 
     def emit(self, force=False):
         t = time.monotonic()
-        if self.callback and (force or t - self.last_emit >= 0.5):
+        with self.lock:
+            if not self.callback or (not force and t - self.last_emit < 0.5):
+                return
             self.last_emit = t
-            self.callback(self.state())
+            callback = self.callback
+            state = self.state()
+        try:
+            callback(state)
+        except Exception as exc:
+            # An observer is not part of the archival transaction. Preserve the
+            # worker's outcome and disable a broken observer after one warning.
+            try:
+                message = str(exc)[:500]
+            except Exception:
+                message = "Observer exception message could not be read"
+            with self.lock:
+                if self.callback is callback:
+                    self.callback = None
+                    self.events.append(
+                        {
+                            "time": now(),
+                            "level": "WARNING",
+                            "code": "PROGRESS_OBSERVER_FAILED",
+                            "observer_error": type(exc).__name__,
+                            "message": message,
+                        }
+                    )
 
 
 class ConsoleProgress:

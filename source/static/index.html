@@ -1,6 +1,16 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="ap20-token" content="__SESSION_TOKEN__"><title>Archivist</title><link rel="stylesheet" href="/app.css"><script defer src="/app.js"></script></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="ap20-token" content="__SESSION_TOKEN__"><title>Archivist</title><link rel="stylesheet" href="/app.css"><script defer src="/bootstrap.js"></script></head>
 <body>
+<section id="compatibility" class="compatibility" role="status">
+  <h1>Archivist browser check</h1>
+  <p id="compatibility-message">Checking this browser before loading the interface. If this message remains, JavaScript may be disabled or a local script may have failed.</p>
+  <noscript><p>The interactive interface needs JavaScript. Enable it for this local page, use another browser, or run the command-line interface.</p></noscript>
+  <p>The interface targets ES2017 with Fetch, Promises, Map and Set. Native dialog support is optional. A capability check is not a complete browser qualification.</p>
+  <p><a href="/">Reload the local interface</a> while the Archivist process is running. For command-line help:</p>
+  <pre>python archivist.py --help</pre>
+  <p>Existing archive sets remain independently usable: open ARCHIVE.html or README.txt without JavaScript, or follow their RESTORE.py instructions.</p>
+</section>
+<div id="app-shell" hidden>
 <a class="skip" href="#main">Skip to workspace</a>
 <header class="appbar">
   <strong>Archivist <span id="app-version" class="muted"></span></strong>
@@ -55,6 +65,8 @@
     <div id="recovery-result"></div>
   </section>
 </main>
-<footer class="activity"><div class="toolbar"><strong id="task-phase">Ready</strong><span id="task-metrics" class="muted"></span><button id="cancel-task" class="end" disabled>Cancel</button><button id="show-activity">Activity</button></div><progress id="task-progress" value="0" max="1" aria-label="Current operation progress"></progress><div id="task-path" class="path muted">No source reads or writes in progress.</div></footer>
-<dialog id="dialog"><form id="dialog-form"><header class="toolbar"><h2 id="dialog-title"></h2><button id="dialog-close" type="button" class="end" aria-label="Close dialog">×</button></header><div id="dialog-body"></div><p id="dialog-error" class="error" role="alert"></p><footer class="toolbar"><button id="dialog-cancel" type="button">Cancel</button><button id="dialog-submit" type="submit" class="end primary">Continue</button></footer></form></dialog>
+<footer class="activity"><div class="toolbar"><strong id="task-phase">Ready</strong><span id="task-metrics" class="muted"></span><button id="cancel-task" class="end" disabled>Cancel</button><button id="show-activity">Activity</button></div><div class="progress-scope"><span id="task-overall">Overall: no operation running.</span><span id="task-package"></span></div><progress id="task-overall-progress" value="0" max="1" aria-label="Overall recorded package progress" hidden></progress><label class="sr-only" for="task-progress">Active step progress</label><progress id="task-progress" value="0" max="1"></progress><div id="task-path" class="path muted">No source reads or writes in progress.</div></footer>
+</div>
+<div id="dialog-backdrop" hidden></div>
+<dialog id="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title" tabindex="-1"><form id="dialog-form"><header class="toolbar"><h2 id="dialog-title"></h2><button id="dialog-close" type="button" class="end" aria-label="Close dialog">×</button></header><div id="dialog-body"></div><p id="dialog-error" class="error" role="alert"></p><footer class="toolbar"><button id="dialog-cancel" type="button">Cancel</button><button id="dialog-submit" type="submit" class="end primary">Continue</button></footer></form></dialog>
 </body></html>

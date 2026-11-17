@@ -14,4 +14,13 @@ workspace.sqlite*
 .coverage
 htmlcov/
 *.tar.zst
+node_modules/
+release-inputs/
+release-assets/
+native-validation.json
+packaging-validation.json
+python-distribution-check/
+browser-validation/
+repeat-dist/
+release-notes.md
 

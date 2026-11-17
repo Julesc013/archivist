@@ -1,42 +1,20 @@
-# Naming research — open
+# Project identity
 
-Research date: **2026-11-17**. The user will choose the final project/repository
-name after the implementation and qualification work is ready. No name is
-reserved, published or represented as universally unused.
+The chosen project is **Archivist** at
+https://github.com/Julesc013/archivist. Its executable and Python namespace are
+`archivist`; its Python distribution metadata name is `archivist-archive`.
+GitHub release assets are the distribution channel for this release. A matching
+name in another registry is not evidence that its package is this project.
 
-## Established conflicts in the preferred short names
+The user selected this identity after comparing literal and metaphorical names.
+The choice is not a claim of a globally unused word, trademark clearance or
+exclusive executable name. Commands can still collide in a user's PATH; the
+portable `python3 archivist.py` invocation identifies this checkout explicitly.
 
-| Name | Observed conflict | Primary source |
-|---|---|---|
-| hoard | Existing backup/sync/restore CLI and package projects | https://hoard.services/cli ; https://docs.rs/hoard/latest/hoard/ |
-| bale | Existing packaging/offline-transfer CLI with bale create/save | https://pkg.go.dev/github.com/strio-dev/bale |
-| chive | Exact PyPI project; other active/archived software projects | https://pypi.org/project/chive/ ; https://github.com/chive-pub/chive ; https://github.com/fusonic/chive |
-| fardel | Exact Python package | https://pypi.org/project/fardel/ |
-| kist | Exact package and command | https://pypi.org/project/kist/ |
-| foldkeep | Exact Python package for context compression | https://pypi.org/project/foldkeep/ |
+The earlier bounded naming research is retained as
+[historical research](history/naming-research-2026-11-17.md). Its negative search
+results never established availability. No further naming decision blocks the
+chosen repository.
 
-These observations do not prove legal exclusivity or that every system has the
-command installed. They do disprove blanket claims of no software/package collision.
-
-## Families worth further screening
-
-| Candidate | Intended reading | Current evidence |
-|---|---|---|
-| coldstow | Put data into cold storage | No relevant software hit in limited exact-name web searches; availability UNVERIFIED |
-| baleplan | Coherent bundles plus capacity planning | No relevant software hit in limited searches; registry/owner namespace UNVERIFIED |
-| balekeep | Bundle and keep | No relevant software hit in limited searches; non-software uses exist; UNVERIFIED |
-| chivepack | Archive-oriented packing | No relevant software hit in limited searches; UNVERIFIED |
-| stowset | Arrange a recoverable storage set | Non-software product uses surfaced; software/registry availability UNVERIFIED |
-| baleset | A set of bounded bundles | Broad unrelated search uses; software/registry availability UNVERIFIED |
-| chive-archive | Keep preferred chive identity with explicit purpose | New derivative idea, not yet comprehensively screened |
-| archivist | Literal working title | Descriptive; exact owner namespace and distribution reservation not checked |
-
-Negative search results are weak evidence. Before selection, check the intended
-GitHub owner/repository, exact executable name in relevant package systems,
-PyPI if distributing there, documentation/search ambiguity and domains only if
-needed. A repository may use a qualified name while a command uses a different
-one, but that tradeoff must be intentional. Do not buy/register/publish anything
-as part of this research.
-
-Naming must not alter stored AP20 format identifiers, historical receipts,
-archive checksums or recovery commands embedded in existing media.
+Product naming does not rewrite stored `AP20*/1` identifiers, `.ap20` evidence
+bundles, historic receipts, archive checksums or helpers already on media.

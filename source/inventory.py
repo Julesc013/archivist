@@ -10,6 +10,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -403,6 +404,13 @@ class InventoryBuilder:
         }
 
 
+def entry_stat(entry):
+    """Windows DirEntry.stat omits device/inode/link-count identity fields."""
+    if sys.platform == "win32":
+        return os.stat(entry.path, follow_symlinks=False)
+    return entry.stat(follow_symlinks=False)
+
+
 def scan_filesystem(
     store, root, label, progress, hash_files=False, source_id=None, cross_mounts=False
 ):
@@ -450,7 +458,7 @@ def scan_filesystem(
                             b.counts["excluded_rows"] += 1
                             continue
                         try:
-                            st = e.stat(follow_symlinks=False)
+                            st = entry_stat(e)
                             attrs = getattr(st, "st_file_attributes", 0)
                             common = {
                                 "mtime_ns": st.st_mtime_ns,
@@ -490,8 +498,13 @@ def scan_filesystem(
                                     h = hashlib.sha256()
                                     with regular_source(root, rel) as (stream, opened):
                                         require(
-                                            (opened.st_size, opened.st_mtime_ns)
-                                            == (st.st_size, st.st_mtime_ns),
+                                            (
+                                                opened.st_dev,
+                                                opened.st_ino,
+                                                opened.st_size,
+                                                opened.st_mtime_ns,
+                                            )
+                                            == (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns),
                                             "SOURCE_CHANGED",
                                             "File changed before hashing",
                                             path=rel,
@@ -501,8 +514,20 @@ def scan_filesystem(
                                             h.update(block)
                                         after = os.fstat(stream.fileno())
                                         require(
-                                            (after.st_size, after.st_mtime_ns, after.st_ctime_ns)
-                                            == (st.st_size, st.st_mtime_ns, st.st_ctime_ns),
+                                            (
+                                                after.st_dev,
+                                                after.st_ino,
+                                                after.st_size,
+                                                after.st_mtime_ns,
+                                                after.st_ctime_ns,
+                                            )
+                                            == (
+                                                st.st_dev,
+                                                st.st_ino,
+                                                st.st_size,
+                                                st.st_mtime_ns,
+                                                st.st_ctime_ns,
+                                            ),
                                             "SOURCE_CHANGED",
                                             "File changed while hashing",
                                             path=rel,

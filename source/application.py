@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 from . import __version__
 from . import artifacts, catalogue, destinations, evidence, inventory, planning, recovery, sampling
+from .compat import require_runtime, runtime_capabilities
 from .progress import Progress
 from .store import Store, default_workspace
 from .util import (
@@ -23,6 +24,7 @@ from .util import (
     no_links,
     require,
     root_identity,
+    within,
 )
 
 READ_ACTIONS = frozenset(
@@ -82,8 +84,122 @@ def decoded_record(row, keys):
     return row
 
 
+def diagnose_runtime(workspace=None):
+    """Read-only environment diagnostics, usable before creating a workspace."""
+    runtime = runtime_capabilities()
+    version = None
+    exe = shutil.which("zstd")
+    if exe:
+        try:
+            version = subprocess.run(
+                [exe, "--version"], capture_output=True, text=True, timeout=5
+            ).stdout.strip()
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    es = shutil.which("es.exe") if os.name == "nt" else None
+    checks = [
+        {
+            "id": "python",
+            "label": "Python",
+            "state": "ready" if runtime["python_supported"] else "unsupported",
+            "detail": runtime["python_version"],
+            "action": "Python 3.8 or newer is required; use a maintained interpreter where available.",
+        },
+        {
+            "id": "sqlite",
+            "label": "Evidence database",
+            "state": "ready" if runtime["compatible"] else "unsupported",
+            "detail": runtime["sqlite_version"],
+            "action": "SQLite 3.31+ with working UPSERT, backup and verified safety pragmas is required. "
+            + (
+                runtime["error"]["message"]
+                if runtime["error"]
+                else "Use export to transfer a checked workspace."
+            ),
+        },
+        {
+            "id": "zstd",
+            "label": "Zstandard (optional)",
+            "state": "ready" if version else ("unverified" if exe else "missing"),
+            "detail": version or exe or "Not on PATH",
+            "action": "Install zstd for .tar.zst; uncompressed TAR and gzip are available without it.",
+        },
+        {
+            "id": "everything",
+            "label": "Everything acquisition",
+            "state": ("unverified" if es else "missing") if os.name == "nt" else "not_applicable",
+            "detail": es
+            or (
+                "es.exe was not found on PATH"
+                if os.name == "nt"
+                else "Windows-only optional acquisition adapter"
+            ),
+            "action": "On Windows run Everything 1.5 and configure es.exe. Presence does not prove live IPC; a scan checks it. Choose filesystem scanning explicitly if desired.",
+        },
+        {
+            "id": "ltfs",
+            "label": "Mounted LTFS",
+            "state": "unverified",
+            "detail": "Experimental Linux adapter; no physical hardware qualification in this release",
+            "action": "Use the documented mount, flush, reload and readback procedure before relying on a cartridge.",
+        },
+    ]
+    selected_workspace = None
+    workspace_error = None
+    try:
+        selected_workspace = str(Path(workspace or default_workspace()).expanduser().absolute())
+    except Exception as exc:
+        # Diagnostics must remain available when remembered configuration cannot
+        # resolve. This block performs no workspace creation or state repair.
+        workspace_error = (
+            exc.record()
+            if isinstance(exc, Problem)
+            else {"code": type(exc).__name__, "message": str(exc)}
+        )
+        candidate = (
+            workspace_error.get("detail", {}).get("path")
+            if workspace_error["code"] == "WORKSPACE_OFFLINE"
+            else None
+        )
+        if isinstance(candidate, str):
+            selected_workspace = candidate
+        checks.append(
+            {
+                "id": "workspace",
+                "label": "Workspace selection",
+                "state": "unavailable",
+                "detail": workspace_error["message"],
+                "action": "Reconnect the remembered workspace or use --workspace PATH to select another location.",
+            }
+        )
+    return {
+        "version": __version__,
+        "python": sys.version,
+        "platform": platform.platform(),
+        "sqlite": sqlite3.sqlite_version,
+        "workspace": selected_workspace,
+        "workspace_error": workspace_error,
+        "runtime": runtime,
+        "zstd": {"path": exe, "version": version},
+        "everything_cli": es,
+        "checks": checks,
+        "capabilities": {
+            "pax_tar": True,
+            "gzip": True,
+            "zstd": bool(version),
+            "disk": True,
+            "ltfs_linux": "experimental, mounted only",
+            "raw_tape": False,
+            "optical_burning": False,
+            "full_filesystem_image": False,
+        },
+        "running_as_root": bool(hasattr(os, "geteuid") and os.geteuid() == 0),
+    }
+
+
 class Application:
     def __init__(self, workspace=None):
+        require_runtime()
         self.workspace = no_links(Path(workspace or default_workspace()), missing_ok=True)
         with locked(self.workspace / ".initialise.lock"):
             with Store(self.workspace):
@@ -113,6 +229,8 @@ class Application:
                         if isinstance(exc, Problem)
                         else {"code": type(exc).__name__, "message": str(exc)}
                     )
+                    if hasattr(exc, "kit_recovery_error"):
+                        error["kit_recovery_error"] = exc.kit_recovery_error
                     error["events"] = list(p.events)[-50:]
                     s.finish(op, error=error)
                     raise
@@ -318,81 +436,7 @@ class Application:
                 )
             ]
         if action == "doctor":
-            version = None
-            exe = shutil.which("zstd")
-            if exe:
-                try:
-                    version = subprocess.run(
-                        [exe, "--version"], capture_output=True, text=True, timeout=5
-                    ).stdout.strip()
-                except (OSError, subprocess.TimeoutExpired):
-                    pass
-            es = shutil.which("es.exe") if os.name == "nt" else None
-            checks = [
-                {
-                    "id": "python",
-                    "label": "Python",
-                    "state": "ready",
-                    "detail": platform.python_version(),
-                    "action": "Application requires Python 3.12 or newer.",
-                },
-                {
-                    "id": "sqlite",
-                    "label": "Evidence database",
-                    "state": "ready",
-                    "detail": sqlite3.sqlite_version,
-                    "action": "Use export to transfer a checked workspace.",
-                },
-                {
-                    "id": "zstd",
-                    "label": "Zstandard (optional)",
-                    "state": "ready" if version else ("unverified" if exe else "missing"),
-                    "detail": version or exe or "Not on PATH",
-                    "action": "Install zstd for .tar.zst; uncompressed TAR and gzip are available without it.",
-                },
-                {
-                    "id": "everything",
-                    "label": "Everything acquisition",
-                    "state": ("unverified" if es else "missing")
-                    if os.name == "nt"
-                    else "not_applicable",
-                    "detail": es
-                    or (
-                        "es.exe was not found on PATH"
-                        if os.name == "nt"
-                        else "Windows-only optional acquisition adapter"
-                    ),
-                    "action": "On Windows run Everything 1.5 and configure es.exe. Presence does not prove live IPC; a scan checks it. Choose filesystem scanning explicitly if desired.",
-                },
-                {
-                    "id": "ltfs",
-                    "label": "Mounted LTFS",
-                    "state": "unverified",
-                    "detail": "Experimental Linux adapter; no physical hardware qualification in this release",
-                    "action": "Use the documented mount, flush, reload and readback procedure before relying on a cartridge.",
-                },
-            ]
-            return {
-                "version": __version__,
-                "python": sys.version,
-                "platform": platform.platform(),
-                "sqlite": sqlite3.sqlite_version,
-                "workspace": str(s.root),
-                "zstd": {"path": exe, "version": version},
-                "everything_cli": es,
-                "checks": checks,
-                "capabilities": {
-                    "pax_tar": True,
-                    "gzip": True,
-                    "zstd": bool(exe),
-                    "disk": True,
-                    "ltfs_linux": "experimental, mounted only",
-                    "raw_tape": False,
-                    "optical_burning": False,
-                    "full_filesystem_image": False,
-                },
-                "running_as_root": bool(hasattr(os, "geteuid") and os.geteuid() == 0),
-            }
+            return diagnose_runtime(self.workspace)
         if action == "preflight_build":
             return artifacts.preflight_build(s, progress=p, **a)
         if action == "preflight_copy":
@@ -400,7 +444,9 @@ class Application:
         if action == "preflight_restore":
             return self.restore_review(**a)
         if action == "allocate":
-            return planning.allocate_plan(s, a["plan_id"], a["media"], bundle=a.get("bundle"))
+            return planning.allocate_plan(
+                s, a["plan_id"], a["media"], bundle=a.get("bundle"), progress=p
+            )
         if action == "preferences":
             return s.settings()
         raise Problem("ACTION", "Unknown read operation")
@@ -415,7 +461,7 @@ class Application:
                 "Unknown acquisition backend",
             )
             require(
-                not Path(root).resolve().is_relative_to(s.root),
+                not within(Path(root).resolve(), s.root),
                 "SOURCE_WORKSPACE",
                 "A source cannot be the working-evidence directory or its descendant",
             )

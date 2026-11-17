@@ -19,8 +19,9 @@ from . import archive_html, recovery
 from .util import atomic_json, canonical, fsync_dir, hash_file, json_read, require
 
 
-TRANSACTION = ".archivist-kit"
-FORMAT = "ArchivistKitTransaction/1"
+# These persisted identifiers predate the product rename and remain readable.
+TRANSACTION = ".archive-planner-kit"
+FORMAT = "ArchivePlannerKitTransaction/1"
 # Seal last: an intermediate mixture must never advertise a matching seal.
 FILES = ("RESTORE.py", "README.txt", "ARCHIVE.html", "ARCHIVE.json", "SHA256SUMS")
 MANDATORY = {"RESTORE.py", "README.txt", "ARCHIVE.json", "SHA256SUMS"}
@@ -350,7 +351,15 @@ def publish(root, index, readme, progress=None):
                 # Cancellation should stop new work, not interrupt rollback.
                 recover(root)
             except BaseException as rollback_error:
-                exc.add_note("Kit recovery remains pending: " + str(rollback_error))
+                # Python 3.8 has no add_note(). Retain the secondary failure as
+                # structured diagnostic evidence without masking the primary one.
+                exc.kit_recovery_error = str(rollback_error)
+                if hasattr(exc, "detail") and isinstance(exc.detail, dict):
+                    exc.detail["kit_recovery_error"] = str(rollback_error)
+                if hasattr(exc, "add_note"):
+                    exc.add_note("Kit recovery remains pending: " + str(rollback_error))
+                # progress is the standalone reader's callback, not a Progress
+                # instance. Application records kit_recovery_error separately.
             raise
     finally:
         if prepared.exists():

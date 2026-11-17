@@ -8,7 +8,7 @@ import shlex
 import sys
 from pathlib import Path
 from . import __version__
-from .application import Application
+from .application import Application, diagnose_runtime
 from .progress import ConsoleProgress
 from .util import Problem, bytes_value, json_read, require, sizes
 
@@ -16,7 +16,7 @@ from .util import Problem, bytes_value, json_read, require, sizes
 def parser():
     p = argparse.ArgumentParser(
         prog="archivist",
-        description="Scan → plan → build → copy → verify/restore. Offline by default. No source deletion.",
+        description="Scan -> plan -> build -> copy -> verify/restore. Offline by default. No source deletion.",
         epilog="Global options --workspace PATH, --json and --quiet may appear before or after the command.",
     )
     p.add_argument("--version", action="version", version=__version__)
@@ -260,6 +260,10 @@ def execute(argv):
         else:
             p.print_help()
             return
+    if command == "doctor":
+        result = diagnose_runtime(global_args.workspace)
+        print_result(result, global_args.json)
+        return result
     app = Application(global_args.workspace)
     if command == "shell":
         return shell(app, global_args.quiet)
@@ -321,11 +325,11 @@ def execute(argv):
 
 def shell(app, quiet=False):
     print(f"Archivist {__version__}  |  {app.workspace}")
-    print("scan → plan → build → copy → verify / restore")
+    print("scan -> plan -> build -> copy -> verify / restore")
     print("Commands: status  list scans  gui  help  quit.  Type any normal CLI command.")
     while True:
         try:
-            line = input("archive> ").strip()
+            line = input("archivist> ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             return
@@ -352,6 +356,13 @@ def shell(app, quiet=False):
 
 def main(argv=None):
     try:
+        # Older Windows consoles and redirected ASCII streams can still display
+        # every result using reversible escapes for unrepresentable characters.
+        # Machine JSON already escapes Unicode independently of terminal settings.
+        for stream in (sys.stdout, sys.stderr):
+            reconfigure = getattr(stream, "reconfigure", None)
+            if reconfigure is not None:
+                reconfigure(errors="backslashreplace")
         execute(sys.argv[1:] if argv is None else argv)
     except KeyboardInterrupt:
         print(

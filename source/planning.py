@@ -7,6 +7,7 @@ import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from . import capacity
+from .progress import Progress
 from .util import canonical, now, require, uid
 
 PACKAGE_OVERHEAD = 10240
@@ -627,9 +628,22 @@ def _allocation_size(package):
 
 
 def allocate(
-    packages, media, set_allowance_bytes=0, *, recovery_kit_bytes=0, set_largest_file_bytes=0
+    packages,
+    media,
+    set_allowance_bytes=0,
+    *,
+    recovery_kit_bytes=0,
+    set_largest_file_bytes=0,
+    dependencies=None,
+    metadata_package_ids=(),
+    progress=None,
 ):
-    """Explainable first-fit decreasing allocation, not a global optimiser."""
+    """Place complete payload groups, sharing metadata within each medium.
+
+    Logical packages remain unchanged. Metadata can have several physical
+    placements, each charged at its measured or estimated stored-object size.
+    A group is added atomically only when all of its objects and kit fit.
+    """
     require(
         media and len({m["id"] for m in media}) == len(media),
         "MEDIA",
@@ -649,6 +663,34 @@ def allocate(
         "Invalid recovery-kit byte counts",
     )
     set_cost = set_allowance_bytes + recovery_kit_bytes
+    by_id = {package["id"]: package for package in packages}
+    require(len(by_id) == len(packages), "PACKAGES", "Package IDs must be unique")
+    dependencies = {} if dependencies is None else dependencies
+    metadata_ids = set(metadata_package_ids)
+    require(
+        isinstance(dependencies, dict) and metadata_ids <= by_id.keys(),
+        "METADATA_DEPENDENCIES",
+        "Unknown metadata package",
+    )
+    for ident, required in dependencies.items():
+        require(
+            ident in by_id
+            and ident not in metadata_ids
+            and isinstance(required, (list, tuple))
+            and len(required) == len(set(required))
+            and set(required) <= metadata_ids,
+            "METADATA_DEPENDENCIES",
+            "Dependencies must name distinct directory-metadata packages",
+        )
+    sizes = {ident: _allocation_size(package) for ident, package in by_id.items()}
+    largest_files = {
+        ident: package.get("largest_file_bytes", sizes[ident]) for ident, package in by_id.items()
+    }
+    require(
+        all(type(size) is int and size >= 0 for size in largest_files.values()),
+        "CAPACITY",
+        "Invalid maximum object size",
+    )
     bins = []
     for m in media:
         cap = m.get("capacity")
@@ -676,38 +718,78 @@ def allocate(
                 "packages": [],
             }
         )
-    unfit = []
-    for p in sorted(packages, key=lambda p: (-_allocation_size(p), p["id"])):
-        n = _allocation_size(p)
-        largest = p.get("largest_file_bytes", n)
-        match = next(
-            (
-                b
-                for b in bins
-                if max(largest, set_largest_file_bytes) <= b["max_file"]
-                and b["used"] + n + (0 if b["packages"] else set_cost) <= b["usable"]
-            ),
-            None,
+    placed = set()
+    selections = [set() for _ in bins]
+
+    def place(group):
+        for medium, selected in zip(bins, selections):
+            if progress is not None:
+                progress.check()
+            additions = group - selected
+            additional = sum(sizes[ident] for ident in additions)
+            required = additional + (0 if selected else set_cost)
+            largest = max([set_largest_file_bytes] + [largest_files[ident] for ident in additions])
+            if largest > medium["max_file"] or medium["used"] + required > medium["usable"]:
+                continue
+            if not selected:
+                medium["set_allowance_bytes"] = set_allowance_bytes
+                medium["recovery_kit_bytes"] = recovery_kit_bytes
+            selected.update(additions)
+            placed.update(additions)
+            medium["used"] += required
+            medium["package_bytes"] += additional
+            return True
+        return False
+
+    groups = {
+        ident: {ident, *dependencies.get(ident, ())} for ident in by_id if ident not in metadata_ids
+    }
+    for ident in sorted(
+        groups, key=lambda ident: (-sum(sizes[item] for item in groups[ident]), ident)
+    ):
+        place(groups[ident])
+    # Empty-directory-only sources, and metadata not covered by a successful
+    # payload placement, still receive an explicit independent placement.
+    for ident in sorted(metadata_ids - placed, key=lambda ident: (-sizes[ident], ident)):
+        place({ident})
+    copy_counts = {
+        ident: sum(ident in selected for selected in selections) for ident in metadata_ids
+    }
+    seen_metadata = set()
+    for medium, selected in zip(bins, selections):
+        directory_ids = selected & metadata_ids
+        medium["packages"] = sorted(selected)
+        medium["payload_package_ids"] = sorted(selected - metadata_ids)
+        medium["directory_metadata_package_ids"] = sorted(directory_ids)
+        medium["directory_metadata_bytes"] = sum(sizes[ident] for ident in directory_ids)
+        medium["replicated_metadata_package_ids"] = sorted(
+            ident for ident in directory_ids if copy_counts[ident] > 1
         )
-        if match:
-            if not match["packages"]:
-                match["set_allowance_bytes"] = set_allowance_bytes
-                match["recovery_kit_bytes"] = recovery_kit_bytes
-                match["used"] += set_cost
-            match["packages"].append(p["id"])
-            match["used"] += n
-            match["package_bytes"] += n
-        else:
-            unfit.append(p["id"])
+        medium["additional_metadata_copy_bytes"] = sum(
+            sizes[ident] for ident in directory_ids & seen_metadata
+        )
+        seen_metadata.update(directory_ids)
     return {
         "media": bins,
-        "unallocated": unfit,
-        "basis": "Measured package objects when available; otherwise TAR and metadata estimates. No predicted compression credit.",
+        "unallocated": sorted(set(by_id) - placed),
+        "basis": "First-fit decreasing payload groups with complete directory-metadata dependencies; measured objects when available, otherwise TAR and metadata estimates. No predicted compression credit.",
         "globally_optimal": False,
+        "physical_replication": {
+            "metadata_package_copy_counts": {
+                ident: copy_counts[ident] for ident in sorted(copy_counts)
+            },
+            "additional_metadata_copies": sum(max(0, count - 1) for count in copy_counts.values()),
+            "additional_metadata_bytes": sum(
+                sizes[ident] * max(0, count - 1) for ident, count in copy_counts.items()
+            ),
+            "physical_package_copies": sum(len(selected) for selected in selections),
+            "allocated_logical_packages": len(placed),
+            "basis": "Every physical metadata copy is charged; logical plan memberships remain exact-once",
+        },
     }
 
 
-def allocation_packages(store, plan_id, bundle=None):
+def allocation_packages(store, plan_id, bundle=None, progress=None):
     """Return stored-object footprints, using a validated saved build when available.
 
     Missing build media is explicitly reported as estimates. A present but invalid
@@ -715,6 +797,8 @@ def allocation_packages(store, plan_id, bundle=None):
     """
     from . import recovery
 
+    progress = progress or Progress()
+    progress.check()
     plan = store.need("plans", plan_id)
     packages = store.rows("SELECT * FROM packages WHERE plan_id=? ORDER BY id", (plan_id,))
     measurement = {"basis": "estimated", "reason": "No completed build is available"}
@@ -733,7 +817,7 @@ def allocation_packages(store, plan_id, bundle=None):
             }
     receipts = {}
     if bundle is not None and (explicit or (Path(bundle) / "ARCHIVE.json").is_file()):
-        root, index, refs = recovery.inspect(bundle)
+        root, index, refs = recovery.inspect(bundle, progress=progress.recovery_callback())
         require(
             index.get("plan_id") == plan_id
             and index.get("plan_fingerprint") == plan["fingerprint"],
@@ -742,7 +826,10 @@ def allocation_packages(store, plan_id, bundle=None):
         )
         by_id = {package["id"]: package for package in packages}
         for ref in refs:
-            receipt, artifact, manifest = recovery.validate_receipt(root, ref, hash_payload=False)
+            progress.check()
+            receipt, artifact, manifest = recovery.validate_receipt(
+                root, ref, progress=progress.recovery_callback(), hash_payload=False
+            )
             package = by_id.get(receipt["package_id"])
             require(
                 package is not None
@@ -774,30 +861,25 @@ def allocation_packages(store, plan_id, bundle=None):
     return packages, measurement
 
 
-def allocate_plan(store, plan_id, media, *, bundle=None):
-    packages, measurement = allocation_packages(store, plan_id, bundle)
+def allocate_plan(store, plan_id, media, *, bundle=None, progress=None):
+    progress = progress or Progress()
+    packages, measurement = allocation_packages(store, plan_id, bundle, progress)
     kit = measurement.get("recovery_kit", {})
+    dependencies, metadata_ids = capacity.package_metadata_dependencies(packages)
     result = allocate(
         packages,
         media,
         capacity.COPY_SET_ALLOWANCE_BYTES,
         recovery_kit_bytes=kit.get("recovery_kit_bytes", 0),
         set_largest_file_bytes=kit.get("largest_file_bytes", 0),
+        dependencies=dependencies,
+        metadata_package_ids=metadata_ids,
+        progress=progress,
     )
     result["measurement"] = measurement
     result["package_footprints"] = [
         {"package_id": package["id"], **package["footprint"]} for package in packages
     ]
-    metadata = {}
-    for package in packages:
-        if package["kind"] == "directories":
-            metadata.setdefault(package["snapshot_id"], []).append(package["id"])
-    dependencies = {
-        package["id"]: metadata.get(package["snapshot_id"], [])
-        for package in packages
-        if package["kind"] == "data"
-    }
-    metadata_ids = {package["id"] for package in packages if package["kind"] == "directories"}
     for medium in result["media"]:
         medium.update(
             capacity.metadata_plan_selection(
@@ -808,7 +890,7 @@ def allocate_plan(store, plan_id, media, *, bundle=None):
         medium["metadata_completeness"] == "complete" for medium in result["media"]
     )
     result["basis"] += (
-        " A byte fit does not imply complete directory metadata on each medium."
-        " Required metadata packages are listed per medium; no automatic duplication is charged."
+        " Each medium's packages list is a concrete copy selection with its required directory metadata."
+        " Repeated physical metadata copies are included in used bytes and the replication report."
     )
     return result

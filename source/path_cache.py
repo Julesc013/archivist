@@ -9,8 +9,7 @@ from __future__ import annotations
 
 import sys
 from collections import OrderedDict
-from collections.abc import Iterator, MutableMapping
-from typing import TypeVar, Generic
+from typing import TypeVar, Generic, Iterator, MutableMapping
 
 DEFAULT_MAX_ENTRIES = 8192
 DEFAULT_MAX_BYTES = 8 * 1024 * 1024

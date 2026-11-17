@@ -3,6 +3,7 @@
 import json
 import subprocess
 import sys
+from contextlib import ExitStack
 from pathlib import Path
 from unittest import mock
 
@@ -88,10 +89,13 @@ Application(sys.argv[2]).call('build', json.loads(sys.argv[3]))
                     raise OSError("Injected interruption after new HTML")
             return original_replace(source, destination, expected)
 
-        with (
-            mock.patch.object(kit_publication, "publish", side_effect=record_publish),
-            mock.patch.object(kit_publication, "replace_file", side_effect=fail_second_index),
-        ):
+        with ExitStack() as patches:
+            patches.enter_context(
+                mock.patch.object(kit_publication, "publish", side_effect=record_publish)
+            )
+            patches.enter_context(
+                mock.patch.object(kit_publication, "replace_file", side_effect=fail_second_index)
+            )
             with self.assertRaisesRegex(OSError, "Injected interruption"):
                 self.app.call("build", {**args, "approval": review["approval"]})
         self.assertEqual(self.control_bytes(root), prior)
@@ -124,6 +128,29 @@ Application(sys.argv[2]).call('build', json.loads(sys.argv[3]))
         result = self.app.call("build", {**args, "approval": pending["approval"]})
         self.assertEqual(result["state"], "COMPLETE")
         self.assertFalse((root / kit_publication.TRANSACTION).exists())
+        self.assertEqual(recovery.run(root)["state"], "CONTENTS_VERIFIED")
+
+    def test_failed_rollback_preserves_primary_exception_and_secondary_evidence(self):
+        plan, args, review = self.build_args()
+        primary = OSError("Injected primary publication failure")
+        secondary = RuntimeError("Injected secondary rollback failure")
+        with ExitStack() as patches:
+            patches.enter_context(
+                mock.patch.object(kit_publication, "replace_file", side_effect=primary)
+            )
+            patches.enter_context(
+                mock.patch.object(kit_publication, "recover", side_effect=secondary)
+            )
+            with self.assertRaises(OSError) as caught:
+                self.app.call("build", {**args, "approval": review["approval"]})
+        self.assertIs(caught.exception, primary)
+        self.assertEqual(caught.exception.kit_recovery_error, str(secondary))
+        root = Path(args["output"])
+        self.assertTrue((root / kit_publication.TRANSACTION).is_dir())
+        failure = next(row["error"] for row in self.app.call("history") if row["kind"] == "build")
+        self.assertEqual(failure["code"], "OSError")
+        self.assertEqual(failure["kit_recovery_error"], str(secondary))
+        self.assertEqual(self.build(plan)["state"], "COMPLETE")
         self.assertEqual(recovery.run(root)["state"], "CONTENTS_VERIFIED")
 
     def test_initial_generation_process_exit_recovers_without_prior_kit(self):

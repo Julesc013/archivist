@@ -1,0 +1,8 @@
+# Source checkouts have consistent bytes on every platform. Sealed fixtures are
+# historical binary evidence even when their contents happen to be readable text.
+* text=auto eol=lf
+tests/fixtures/** -text
+*.sqlite -text
+*.gz -text
+*.zip -text
+*.png -text

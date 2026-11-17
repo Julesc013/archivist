@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 """Optional Playwright workflow fixture with native localhost navigation by default.
 
-All assets and API responses come from the real local server. No source fixture or
-browser dependency is required for the normal application or its core tests. The
-explicit --bridge diagnostic mode does NOT qualify navigation or CSP enforcement.
+All assets and API responses come from the real local server under its CSP.
+Playwright is a development-only dependency; the application does not require it.
+Browser sandboxing stays enabled. A blocked launch is reported, never bypassed.
 """
 
 import argparse
+import importlib.metadata
+import platform
 import json
-import re
 import sys
 import tempfile
 import threading
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,11 +24,10 @@ from archivist.web import make_server
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--output", required=True)
-    p.add_argument("--chromium", default="/usr/bin/chromium")
+    p.add_argument("--browser", choices=("chromium", "firefox", "webkit"), default="chromium")
+    p.add_argument("--executable", help="Optional locally installed browser executable")
     p.add_argument(
-        "--bridge",
-        action="store_true",
-        help="Diagnostic HTTP bridge; does not qualify native navigation/CSP",
+        "--force-fallback-dialog", action="store_true", help="Qualify the non-native dialog path"
     )
     a = p.parse_args()
     from playwright.sync_api import sync_playwright
@@ -37,7 +35,10 @@ def main():
     out = Path(a.output)
     out.mkdir(parents=True, exist_ok=True)
     records = []
-    with tempfile.TemporaryDirectory(prefix="ap20-browser-") as t:
+    outcome = "FAILED"
+    failure = None
+    browser_version = None
+    with tempfile.TemporaryDirectory(prefix="archivist-browser-") as t:
         base = Path(t)
         source = base / "Source"
         source.mkdir()
@@ -59,68 +60,57 @@ def main():
         thread.start()
         origin = f"http://127.0.0.1:{server.server_port}"
 
-        def get(path):
-            with urllib.request.urlopen(origin + path, timeout=10) as r:
-                return r.read().decode()
-
-        html = get("/")
-        css = get("/app.css")
-        js = get("/app.js")
-
-        def bridge(payload):
-            url = payload["url"]
-            opts = payload.get("options") or {}
-            if not isinstance(url, str) or not url.startswith("/api/"):
-                raise ValueError("Test bridge only permits this application API")
-            body = opts.get("body")
-            body = body.encode() if body is not None else None
-            req = urllib.request.Request(
-                origin + url,
-                data=body,
-                headers=opts.get("headers", {}),
-                method=opts.get("method", "GET"),
-            )
-            try:
-                with urllib.request.urlopen(req, timeout=30) as r:
-                    return {"status": r.status, "body": r.read().decode()}
-            except urllib.error.HTTPError as r:
-                return {"status": r.code, "body": r.read().decode()}
-
         def passed(name):
             records.append({"check": name, "result": "PASS"})
 
         try:
             with sync_playwright() as pw:
-                browser = pw.chromium.launch(
-                    executable_path=a.chromium, headless=True, args=["--no-sandbox"]
-                )
+                launch = {"headless": True}
+                if a.executable:
+                    launch["executable_path"] = a.executable
+                if a.browser == "chromium":
+                    launch["chromium_sandbox"] = True
+                browser = getattr(pw, a.browser).launch(**launch)
+                browser_version = browser.version
                 page = browser.new_page(
                     viewport={"width": 1440, "height": 1000}, color_scheme="light"
                 )
                 page.set_default_timeout(15000)
                 errors = []
                 page.on("pageerror", lambda e: errors.append(str(e)))
-                if a.bridge:
-                    page.expose_function("httpBridge", bridge)
-                    supplied = re.sub(r'<link rel="stylesheet"[^>]*>', "", html)
-                    supplied = re.sub(r'<script defer src="/app.js"></script>', "", supplied)
-                    page.set_content(supplied)
-                    page.add_style_tag(content=css)
-                    page.add_script_tag(
-                        content="window.fetch=async(url,options)=>{const r=await window.httpBridge({url:String(url),options:options||{}});return new Response(r.body,{status:r.status,headers:{'Content-Type':'application/json'}});};"
+                page.add_init_script(
+                    "window.__cspViolations=[]; document.addEventListener('securitypolicyviolation', function(e){window.__cspViolations.push({blockedURI:e.blockedURI,directive:e.effectiveDirective});});"
+                )
+                if a.force_fallback_dialog:
+                    page.add_init_script(
+                        "HTMLDialogElement.prototype.showModal=undefined; HTMLDialogElement.prototype.close=undefined;"
                     )
-                    page.add_script_tag(content=js)
-                else:
-                    response = page.goto(origin + "/", wait_until="networkidle")
-                    assert response.status == 200
-                    assert "script-src 'self'" in response.headers["content-security-policy"]
+                response = page.goto(origin + "/", wait_until="networkidle")
+                assert response.status == 200
+                assert "script-src 'self'" in response.headers["content-security-policy"]
                 page.wait_for_function(
                     "document.getElementById('workspace-name').textContent.length>0"
                 )
+                page.locator("#app-shell").wait_for(state="visible")
+                page.locator("#compatibility").wait_for(state="hidden")
+                passed("Native localhost navigation and capability bootstrap under the server CSP")
+                page.get_by_role("button", name="Scan a source…", exact=True).focus()
+                page.keyboard.press("Enter")
+                page.locator("#dialog-submit").focus()
+                page.keyboard.press("Tab")
+                assert page.locator("#dialog-close").evaluate("e=>e===document.activeElement")
+                page.keyboard.press("Shift+Tab")
+                assert page.locator("#dialog-submit").evaluate("e=>e===document.activeElement")
+                page.keyboard.press("Escape")
+                assert not page.locator("#dialog").is_visible()
+                assert page.locator("#new-scan").evaluate("e=>e===document.activeElement")
                 passed(
-                    "HTTP bridge bootstrap"
-                    if a.bridge
-                    else "Native localhost navigation with server CSP header"
+                    "Modal keyboard focus cycle, Escape dismissal and focus return"
+                    + (
+                        " using fallback dialog"
+                        if a.force_fallback_dialog
+                        else " using native dialog"
+                    )
                 )
                 page.get_by_role("button", name="Scan a source…", exact=True).click()
                 page.get_by_label("Source directory", exact=True).fill(str(source))
@@ -165,9 +155,15 @@ def main():
                 page.get_by_role("button", name="Build this plan…", exact=True).click()
                 page.get_by_label("Staging output directory", exact=True).fill(str(base / "build"))
                 page.get_by_role("button", name="Review build", exact=True).click()
+                assert page.get_by_role(
+                    "heading", name="Staging · retained archive set", exact=True
+                ).is_visible()
+                assert page.get_by_role(
+                    "heading", name="Final destination · separate copy", exact=True
+                ).is_visible()
                 page.get_by_role("button", name="Confirm build", exact=True).click()
                 page.wait_for_function(
-                    "document.getElementById('notice').textContent.includes('build:') && !document.getElementById('notice').classList.contains('error')",
+                    "document.getElementById('notice').textContent.startsWith('build: COMPLETE') && !document.getElementById('notice').classList.contains('error')",
                     timeout=30000,
                 )
                 passed("Build preflight, explicit confirmation and real TAR/gzip verification")
@@ -181,6 +177,9 @@ def main():
                 )
                 page.get_by_role("button", name="Copy…", exact=True).first.click()
                 page.get_by_role("button", name="Review copy", exact=True).click()
+                assert page.get_by_role(
+                    "heading", name="Final destination · this replica", exact=True
+                ).is_visible()
                 page.get_by_role("button", name="Confirm copy", exact=True).click()
                 page.wait_for_function(
                     "document.getElementById('notice').textContent.includes('copy: COPY_READBACK')",
@@ -240,8 +239,47 @@ def main():
                 passed("Unified File export produces a real portable workspace bundle")
                 assert not errors, errors
                 passed("No JavaScript runtime errors observed in tested workflow")
+                assert page.evaluate("window.__cspViolations.length") == 0
+                page.evaluate(
+                    "var s=document.createElement('script'); s.textContent='window.__unexpectedInlineExecution=true'; document.head.appendChild(s);"
+                )
+                assert page.evaluate("window.__unexpectedInlineExecution === undefined")
+                page.wait_for_function(
+                    "window.__cspViolations.some(function(v){return v.blockedURI==='inline';})"
+                )
+                passed("CSP rejects a deliberately injected inline script")
+                context = browser.new_context(java_script_enabled=False)
+                offline_page = context.new_page()
+                offline_page.goto(origin + "/")
+                assert offline_page.locator("#compatibility").is_visible()
+                assert not offline_page.locator("#app-shell").is_visible()
+                assert "command-line interface" in offline_page.locator("noscript").inner_text()
+                context.close()
+                passed("JavaScript-disabled page shows readable recovery and CLI guidance")
+                context = browser.new_context()
+                context.add_init_script("window.fetch=undefined;")
+                limited_page = context.new_page()
+                api_requests = []
+                limited_page.on(
+                    "request",
+                    lambda request: (
+                        api_requests.append(request.url) if "/api/" in request.url else None
+                    ),
+                )
+                limited_page.goto(origin + "/", wait_until="networkidle")
+                limited_page.wait_for_function(
+                    "document.getElementById('compatibility-message').textContent.includes('Missing capabilities: Fetch')"
+                )
+                assert not limited_page.locator("#app-shell").is_visible()
+                assert not api_requests, api_requests
+                context.close()
+                passed("Missing browser capability blocks the app before API submission")
+                outcome = "PASS"
                 browser.close()
-        except BaseException:
+        except BaseException as exc:
+            failure = {"type": type(exc).__name__, "message": str(exc)[:8000]}
+            if browser_version is None:
+                outcome = "BLOCKED"
             if "page" in locals():
                 try:
                     page.screenshot(path=str(out / "failure.png"), full_page=True)
@@ -253,14 +291,18 @@ def main():
             server.server_close()
             server.tasks.close()
             thread.join()
-            method = (
-                "Actual HTTP assets/API through explicit fetch bridge; native navigation and CSP NOT qualified."
-                if a.bridge
-                else "Native localhost navigation with actual server headers; synthetic source data. Only completed checks are recorded."
-            )
+            method = "Native localhost navigation with actual assets and server headers; synthetic sources. Browser sandbox enabled. Only completed checks are recorded."
             (out / "gui-validation.json").write_text(
                 json.dumps(
                     {
+                        "status": outcome,
+                        "browser": a.browser,
+                        "browser_version": browser_version,
+                        "playwright_version": importlib.metadata.version("playwright"),
+                        "python": platform.python_version(),
+                        "platform": platform.platform(),
+                        "forced_dialog_fallback": a.force_fallback_dialog,
+                        "failure": failure,
                         "checks": records,
                         "count": len(records),
                         "method": method,

@@ -5,8 +5,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
-if sys.version_info < (3, 12):
-    raise SystemExit("Archivist requires Python 3.12 or newer.")
+if sys.version_info < (3, 8):
+    raise SystemExit("Archivist requires Python 3.8 or newer.")
 
 _package_root = Path(__file__).resolve().parent / "source"
 _spec = importlib.util.spec_from_file_location(

@@ -1,161 +1,178 @@
 # Archivist
 
-**2.0.0-alpha.1 — working project name, local development distribution.**
+**2.0.0 — directory-first archives with independent recovery.**
 
-Plan directory trees into bounded packages, build ordinary PAX TAR archives,
-verify their contents, copy them to selected destinations, and recover them
-without the original source disks or application database.
+[Repository](https://github.com/Julesc013/archivist) · [Releases](https://github.com/Julesc013/archivist/releases) · [Changelog](CHANGELOG.md) · [TODO](TODO.md) · [Roadmap](ROADMAP.md)
 
-This is the first implementation release following the V20 audit. It is an
-alpha for evaluation with disposable or independently backed-up data. The
-qualification record is in [docs/validation/README.md](docs/validation/README.md).
-Windows, macOS, browser rendering and physical LTFS qualification are separate
-gates; their presence in a CI definition does not establish a successful run.
+Archivist inventories directory trees, keeps related folders together where
+limits permit, plans their placement on finite media, builds ordinary PAX TAR
+archives, and verifies copies. Each archive set carries the information and
+reader needed to recover without the original disks or application workspace.
+The same operations serve a command-line interface and a local browser interface.
 
-## Start
+The [validation record](docs/validation/README.md) identifies the actual tested
+interpreters, operating systems, browsers and artifacts. A successful disk test
+does not qualify tape hardware. Mounted LTFS is explicitly experimental; raw tape,
+robotics and optical burning are outside this release.
 
-Install **Python 3.12 or newer**. No third-party Python runtime packages are
-required. Install the `zstd` command only if you choose Zstandard compression.
-The GUI requires a browser. Python, the browser and optional external commands
-are runtime dependencies, even though no `pip install` is needed for a checkout.
+## Start from an extracted release or checkout
+
+Keep `archivist.py`, `source/` and `launchers/` together. No editable installation
+or third-party Python runtime package is required.
+
+| Requirement | Purpose |
+|---|---|
+| Python 3.8 or newer, including its standard-library modules | Application and standalone reader |
+| SQLite 3.31.0 or newer linked to the application's Python | Working evidence, verified safety settings, backup and UPSERT |
+| A capable browser | Optional local GUI; the CLI works independently |
+| `zstd` executable | Only for Zstandard encoding/decoding; plain TAR and gzip use Python |
+
+Choose a maintained Python release when available. Compatibility with an older
+interpreter does not renew its upstream security support; see the
+[Python release status](https://devguide.python.org/versions/). SQLite is checked
+independently of the Python version. The diagnostics command works before a
+workspace is created and explains unavailable capabilities.
 
 ```sh
 python3 archivist.py --help
-python3 archivist.py --workspace /path/to/evidence doctor
-python3 archivist.py --workspace /path/to/evidence gui
+python3 archivist.py doctor
+python3 archivist.py --workspace ./evidence gui
 ```
 
-On Windows, use `py -3` in place of `python3`, or open `launchers/GUI.cmd`.
-`launchers/CLI.cmd` opens a small command prompt. Unix launchers use their own
-installation path rather than the current working directory. The macOS
-`.command` launchers still require native qualification.
+On Windows, use `py -3` instead of `python3`, or open `launchers/GUI.cmd`.
+`launchers/CLI.cmd` opens a guided command prompt. Linux launchers are
+`launchers/GUI.sh` and `launchers/CLI.sh`; macOS uses the corresponding `.command`
+files. Launchers locate the extracted application independently of the caller's
+working directory. Unix launchers accept `ARCHIVIST_PYTHON` to select an interpreter.
 
-The interface has four stages: **Sources → Plan → Archive → Recover**. Closing
-its tab leaves the local process and any running job alive. Use **Shutdown**
-after work finishes. The service binds to `127.0.0.1`, checks a random session
-token and request origin, and serves only its three static assets.
+An installed wheel provides the `archivist` command. Its distribution metadata
+name is `archivist-archive`; the repository name is not a claim that an unrelated
+package named `archivist` on a public registry belongs to this project.
+
+## Four stages
+
+| Stage | What you do | Evidence retained |
+|---|---|---|
+| Sources | Scan a root or import an Everything export; inspect exclusions and errors | Observation, source identity, counts and issue ledger |
+| Plan | Review grouping reasons, change encoding, move/merge members, compare or revert revisions | Immutable memberships, policy, lineage and fingerprint |
+| Archive | Review retained staging space, build and read back, then copy to registered destinations | Receipts, hashes, operation history and replica identity |
+| Recover | Search manifests, review required packages, verify or restore into a new directory | Explicit selection scope and verification result |
+
+The GUI starts with a small compatibility loader. Its full interface targets
+ES2017 and the required browser APIs; missing features or a failed script leave
+readable guidance instead of an empty page. Native dialogs are optional, and
+basic layout/focus styles remain available without newer CSS features. Feature
+detection is not proof that an old browser version has been qualified. The
+[compatibility guide](docs/guides/compatibility.md) describes the boundaries.
+
+Closing a browser tab leaves the local service and active job running. Use
+**File → Quit service** after work has finished or cancellation has completed.
+The server binds to `127.0.0.1`, validates its session token and request origin,
+and serves an explicit set of local assets. It needs no cloud account.
 
 ## Command-line workflow
 
-Replace the angle-bracketed IDs below with IDs printed by the preceding command.
-Use an evidence directory outside your source. Build and restore destinations
-must also be separate from the source.
+Use existing `./data` as the source. Keep the evidence workspace, retained staging,
+replica destination and restore output outside that source. Replace
+`SNAPSHOT_ID`, `PLAN_ID` and `DESTINATION_ID` with the IDs returned by preceding
+commands; they are literal placeholders below.
 
 ```sh
-python3 archivist.py --workspace /evidence scan /data --backend filesystem
-python3 archivist.py --workspace /evidence plan <snapshot-id> --codec gzip
-python3 archivist.py --workspace /evidence packages <plan-id>
-python3 archivist.py --workspace /evidence build <plan-id> --output /staging/archive
-python3 archivist.py --workspace /evidence dest /media/backup --label "Copy A"
-python3 archivist.py --workspace /evidence copy /staging/archive --destination <destination-id>
-python3 archivist.py --workspace /evidence verify /staging/archive
-python3 archivist.py --workspace /evidence find /staging/archive Photos
-python3 archivist.py --workspace /evidence restore /staging/archive --output /restore/new
+python3 archivist.py --workspace ./evidence scan ./data --backend filesystem --hash-files
+python3 archivist.py --workspace ./evidence plan SNAPSHOT_ID --codec gzip
+python3 archivist.py --workspace ./evidence packages PLAN_ID
+python3 archivist.py --workspace ./evidence build PLAN_ID --output ./staging/archive-set
+python3 archivist.py --workspace ./evidence dest ./replica-disk --label "Copy A"
+python3 archivist.py --workspace ./evidence copy ./staging/archive-set --destination DESTINATION_ID
+python3 archivist.py --workspace ./evidence verify ./staging/archive-set
+python3 archivist.py --workspace ./evidence find ./staging/archive-set Photos
+python3 archivist.py --workspace ./evidence restore ./staging/archive-set --output ./restored-data
 ```
 
-Build, copy and restore show a current preflight review and request confirmation.
-For automation, `--yes` authorizes the reviewed operation; `--quiet --json`
-produces machine-readable output. Global options work before or after the
-command. Handled operational errors use JSON on standard error and exit status 2.
-Command-line usage errors are plain text; interruption reports cancellation and
-exits 130. IDs are data; do not execute untrusted strings as shell commands.
+Build, copy and restore present a current review and ask for confirmation.
+For unattended runs, add `--yes` after deciding the paths and selection;
+`--quiet --json` produces machine-readable results. Global options work before
+or after the subcommand. Handled operational failures use JSON on stderr and
+exit 2. Argument-parser errors use ordinary text; interruption exits 130.
+See the [operator guide](docs/guides/operator.md) and [operation contract](docs/specs/06-operations.md).
 
-Windows defaults to required Everything acquisition. Choose `--backend
-filesystem` explicitly for ordinary traversal. Everything executable presence
-does not prove that its service/IPC is working; acquisition checks that separately.
+Windows defaults to required Everything acquisition. Choose `--backend filesystem`
+explicitly for ordinary traversal. Finding `es.exe` does not establish that
+Everything's service, instance or index is usable; live acquisition checks that
+separately. Frozen EFU import works without the live Windows service.
 
-## What this alpha changes
+## Media planning and capacity
 
-- Checks the complete sealed recovery kit before verifying, copying or resuming
-  a set, so an altered helper cannot silently acquire a fresh seal.
-- Reconciles a published replica back into the database after a publication /
-  catalogue interruption.
-- Separates archive-set completeness from the packages actually verified.
-- Rejects contradictory TAR metadata and nonzero data after the archive ending.
-- Uses one capacity model, distinguishes measured from estimated sizes, counts
-  package objects and recovery-kit overhead, and labels retained staging.
-- Limits a partial build's availability checks to its required source observations.
-- Preserves grouping reasons through codec edits and creates immutable reverts.
-- Fixes package selections across pages, stale UI state, hidden list truncation,
-  move-target lookup and completed-job progress.
-- Bounds both directory-path caches by entry count and retained scalar bytes;
-  evicted paths are reconstructed from indexed evidence.
-- Adds manifest search, replica visibility and an offline `ARCHIVE.html` catalogue.
-- Maps the unique Python package `archivist` directly onto physical `source/`.
+Allocation uses deterministic first-fit decreasing groups. Each payload is
+placed with its source's required directory-metadata packages. Metadata is
+counted once within one medium and charged again when another medium needs a
+physical copy. A group that cannot fit remains unallocated. Every medium's
+`packages` list is a concrete copy selection, with replication costs disclosed.
+This is a heuristic, with no claim of global packing optimality.
 
-See [CHANGELOG.md](CHANGELOG.md), [specifications](docs/specs/README.md), and
-[the backlog](docs/BACKLOG.md) for acceptance evidence and open work.
+Measured planning counts payloads, manifests, receipts, the recovery kit and
+metadata headroom. Unbuilt packages use labelled estimates. Predicted software
+or hardware compression does not authorize a copy. Copy preflight rechecks
+actual free space, reserve, configured capacity and individual file limits.
+Checked bytes from an interrupted copy receive appropriate retry credit;
+orphaned or conflicting files do not become free space.
 
-## Recovery contract
+Staging retains completed packages. It is not a rolling one-package buffer.
+The [capacity contract](docs/specs/05-capacity-and-planning.md) explains units,
+estimates and the distinction between file lengths and physical media occupancy.
+Mounted Linux LTFS requires explicit opt-in and its own
+[hardware qualification](docs/guides/ltfs-qualification.md).
 
-Every new archive set contains `ARCHIVE.json`, `ARCHIVE.html`, `SHA256SUMS`,
+## Independent recovery
+
+Every newly built set includes `ARCHIVE.json`, `ARCHIVE.html`, `SHA256SUMS`,
 `README.txt`, `RESTORE.py`, package receipts, compressed JSONL member manifests,
-and `.tar`, `.tar.gz` or `.tar.zst` payloads. The recovery script imports only
-Python's standard library and invokes `zstd` when required. It does not import
-this application or open its evidence database.
+and `.tar`, `.tar.gz` or `.tar.zst` payloads. Open the HTML catalogue offline,
+or run these commands from the archive-set directory:
 
 ```sh
 python3 RESTORE.py .
 python3 RESTORE.py . --to /path/to/new-directory
+python3 RESTORE.py . --to /path/to/another-new-directory --permissions
 ```
 
-Payload packages are independently decodable. Complete preservation of a
-source's recorded directory metadata additionally requires its directory-only
-packages. The GUI search proposes that dependency closure; explicit `--package`
-options select exactly the supplied packages. Searching manifests does not
-verify payload contents, and restoring matching packages can restore more than
-the matching files.
+The reader uses Python 3.8+ standard-library modules, including `sqlite3` for a
+temporary path index; it does not open the original evidence database. Zstandard
+payloads additionally require `zstd`. No application installation is required.
+Standalone recovery does not use the application's SQLite 3.31 feature set.
 
-The baseline preserves ordinary files, representable paths, empty directories,
-recorded modification times and ordinary permission bits where supported. It
-does not promise a filesystem image, application consistency, ACLs, ADS, EFS,
-hard-link relationships or sparse allocation. Live scans are observations, not
-point-in-time snapshots. SHA-256 checksums establish consistency with the given
-catalogue, not authenticity if the catalogue and seals were replaced together.
+Payload packages are independently decodable. Full preservation of a source's
+recorded directory metadata additionally requires its directory-only packages.
+Search proposes the available dependency closure and reports missing or unknown
+metadata. Explicit `--package` options remain exact selections. Searching does
+not verify payload contents, and restoring a package can extract more than the
+files that matched the search.
 
-## Media and capacity
+The baseline preserves ordinary file bytes, source-namespaced paths, empty
+directories, recorded modification times and ordinary modes where supported.
+Modes are applied only with `--permissions`. It does not preserve ACLs, xattrs,
+ADS, EFS, hard-link relationships, sparse allocation or a complete filesystem
+image. Live reads are checked per file; they are not a cross-file snapshot.
+Checksums establish consistency with the supplied catalogue, not authenticity
+against coordinated replacement of the catalogue and seals.
 
-Local directory destinations are implemented. Mounted LTFS on Linux is
-**experimental** and requires explicit opt-in; no physical cartridge was
-qualified for this release. Raw tape, spanning a compressed stream across tapes,
-robotics, media formatting and optical burning are outside v2.0 scope.
+## Maintenance and evidence
 
-Allocation is deterministic first-fit decreasing, not an exact optimizer. No
-predicted compression saving or hardware-compression credit can authorize a
-copy. Preflight rechecks observed free space and configured limits. A retained
-build keeps all completed packages until the operator manages its storage; the
-application does not implement rolling deletion or claim that only one package
-of scratch space is required.
+Implementation lives directly in `source/`, mapped to the unique `archivist`
+Python namespace. CLI and HTTP use shared application operations. Recovery has
+one independently executable source; a valid sealed helper from an existing set
+is preserved rather than silently upgraded and resealed.
 
-## Repository and development
+- [Specifications](docs/specs/README.md): preservation, formats, safety, capacity and operations.
+- [Architecture](docs/architecture/README.md): module responsibilities and transaction boundaries.
+- [Contributing](CONTRIBUTING.md): tests, build checks and release gates.
+- [Security](SECURITY.md): threat model, safe failure and reporting.
+- [TODO](TODO.md) and [roadmap](ROADMAP.md): delivered code, remaining qualification and small future releases.
 
-Code is directly in `source/`, with cohesive modules and `source/static/` for
-the GUI. CLI and HTTP call the same application operations. The independent
-recovery reader has one authoritative source file; builds copy it unchanged.
-
-```sh
-python3 scripts/run_tests.py --json-out docs/validation/unit-tests-local.json
-node tests/gui_state.test.cjs
-python3 scripts/build_release.py --output dist
-python3 scripts/check_release.py dist/archivist-2.0.0-alpha.1.zip
-python3 scripts/check_python_distribution.py --build --output /path/to/new/build-check
-```
-
-The Node command is a logic test, not browser qualification. Optional browser
-tests require Playwright and a working browser runtime. Portable packaging uses
-the standard library; wheel/sdist packaging uses setuptools and wheel as build
-dependencies. See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-The temporary distribution name `archivist-archive` and command
-`archivist` have not been published or reserved. Naming research continues
-in [docs/NAMING.md](docs/NAMING.md). Renaming the product must not rename existing
-archive format identifiers or invalidate preserved evidence.
-
-## Existing evidence
-
-V20's `AP20*/1` file-format identifiers, `.ap20` evidence bundles and schema 1
-remain intentionally recognizable. Import into a **new** V2 workspace; imported
-sources require explicit binding and imported destinations start disabled.
-The V2 default data/config directories differ from V20's. See
-[migration](docs/guides/migration.md). Preserve the supplied MIT licence.
-
+Archivist 2.0.0 descends from the supplied `ArchivePlanner_v20.0.0-eval.1.zip`.
+Its original name, checksum and baseline evidence are retained in the
+[transition record](docs/architecture/v20-transition.md). Existing `AP20*/1`
+identifiers, `.ap20` evidence bundles and schema 1 remain recognizable.
+[Import into a new workspace](docs/guides/migration.md); imported sources need
+explicit binding and imported destinations start disabled. The original MIT
+copyright notice remains intact.

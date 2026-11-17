@@ -12,29 +12,42 @@ class Element {
         this.listeners = {}; this.attributes = {}; this.value = ''; this._text = '';
         this.disabled = false; this.hidden = false; this.open = false; this.style = {};
         const names = new Set();
-        this.classList = { add: name => names.add(name), toggle: (name, on) => on ? names.add(name) : names.delete(name), contains: name => names.has(name) };
+        this.classList = { add: name => names.add(name), toggle: (name, on) => on ? names.add(name) : names.delete(name), contains: name => names.has(name), remove: name => names.delete(name) };
     }
-    set textContent(text) { this._text = String(text); this.children = []; }
+    set textContent(text) { this._text = String(text); this.children = []; if (this.tagName === 'SELECT') this.value = ''; }
     get textContent() { return this._text + this.children.map(c => typeof c === 'string' ? c : c.textContent).join(''); }
-    append(...children) { this.children.push(...children); }
+    append(...children) { for (const child of children) { if (typeof child !== 'string') { child.parentElement = this; child.ownerDocument = this.ownerDocument; } this.children.push(child); } }
+    appendChild(child) { this.append(child); return child; }
     replaceChildren(...children) { this.children = children; this._text = ''; if (this.tagName === 'SELECT') this.value = ''; }
-    setAttribute(name, value) { this.attributes[name] = value; }
-    removeAttribute(name) { delete this.attributes[name]; }
+    setAttribute(name, value) { this.attributes[name] = String(value); if (name === 'open') this.open = true; }
+    removeAttribute(name) { delete this.attributes[name]; if (name === 'open') this.open = false; }
+    hasAttribute(name) { return Object.hasOwn(this.attributes, name); }
+    getAttribute(name) { return this.attributes[name] === undefined ? null : this.attributes[name]; }
+    contains(node) { return this === node || this.children.some(child => typeof child !== 'string' && child.contains(node)); }
+    focus() { if (this.ownerDocument) this.ownerDocument.activeElement = this; }
+    getClientRects() { return this.hidden ? [] : [1]; }
+    querySelectorAll(selector) {
+        const tags = selector.split(',').map(part => part.trim().split(/[:[.]/)[0].toUpperCase()).filter(Boolean);
+        return this.children.flatMap(child => typeof child === 'string' ? [] : [...((tags.includes(child.tagName) || selector.includes('[tabindex]') && child.hasAttribute('tabindex')) && !(selector.includes(':not(:disabled)') && child.disabled) ? [child] : []), ...child.querySelectorAll(selector)]);
+    }
+    querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
     addEventListener(name, listener) { (this.listeners[name] ||= []).push(listener); }
-    showModal() { this.open = true; }
-    close() { this.open = false; }
+    showModal() { this.setAttribute('open', ''); }
+    close() { this.removeAttribute('open'); }
 }
 
 function harness() {
     const elements = new Map();
-    const node = id => { if (!elements.has(id)) elements.set(id, new Element(id.includes('select') ? 'select' : 'div')); return elements.get(id); };
+    const node = id => { if (!elements.has(id)) { const element = new Element(id.includes('select') ? 'select' : 'div'); element.ownerDocument = document; elements.set(id, element); document.body.append(element); } return elements.get(id); };
     const requests = []; let respond = null, timerId = 0; const timers = new Map();
     const document = {
-        getElementById: node, createElement: tag => new Element(tag), createTextNode: text => String(text),
+        getElementById: node, createElement: tag => { const e = new Element(tag); e.ownerDocument = document; return e; }, createTextNode: text => String(text),
         querySelector: () => ({ content: 'test-token' }),
         querySelectorAll: selector => selector === '#package-rows tr' ? node('package-rows').children : [],
-        documentElement: new Element('html')
+        documentElement: new Element('html'), body: new Element('body'), listeners: {},
+        addEventListener(name, listener) { (this.listeners[name] ||= []).push(listener); }
     };
+    document.documentElement.ownerDocument = document; document.body.ownerDocument = document; document.documentElement.append(document.body);
     const context = vm.createContext({
         document, console, setTimeout: (fn, ms) => { timers.set(++timerId, { fn, ms }); return timerId; }, clearTimeout: id => timers.delete(id),
         Option: function(text, value) { const option = new Element('option'); option.textContent = text; option.value = value; return option; },
@@ -47,8 +60,8 @@ function harness() {
         }
     });
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../source/static/app.js'), 'utf8'), context);
-    const api = vm.runInContext('({S, selectPlan, packages, members, packageDetail, renderPlanSelector, planLabel, loadList, progressText, polling, waitingTasks, schedulePolling, findRecovery, recoveryArgs, fileAction})', context);
-    return { api, node, requests, timers, respond: fn => { respond = fn; } };
+    const api = vm.runInContext('({S, selectPlan, packages, members, packageDetail, renderPlanSelector, planLabel, loadList, progressText, polling, waitingTasks, schedulePolling, findRecovery, recoveryArgs, fileAction, tree, work, dialog, closeDialog, renderProgress, reviewSpaces})', context);
+    return { api, node, document, requests, timers, respond: fn => { respond = fn; } };
 }
 function descendants(element, tag) {
     return element.children.flatMap(child => typeof child === 'string' ? [] : [...(child.tagName === tag ? [child] : []), ...descendants(child, tag)]);
@@ -153,13 +166,100 @@ async function check(name, fn) { await fn(); records.push({ check: name, result:
         });
         await h.node('fit-media').onclick();
         const text = h.node('allocation-results').textContent;
-        assert(text.includes('P000002')); assert(text.includes('not included in this bin'));
+        assert(text.includes('P000002')); assert(text.includes('does not yet have a complete recovery selection'));
         assert(text.includes('Size basis: measured')); assert(!text.includes('All package estimates fit'));
     });
     await check('Diagnostics show actionable checks before optional exact details', async () => {
         const h = harness(); h.respond(() => ({ platform: 'Linux', zstd: { path: null }, checks: [{ label: 'Zstandard', state: 'missing', detail: 'Not on PATH', action: 'Choose TAR or install zstd.' }] }));
         await h.api.fileAction('doctor'); assert(h.node('dialog-body').textContent.includes('Choose TAR or install zstd.'));
         assert.equal(descendants(h.node('dialog-body'), 'DETAILS').length, 1);
+    });
+    await check('Repeated work submission is single-flight and a failed view callback cannot erase completion', async () => {
+        const h = harness(); let callbacks = 0;
+        const task = { id: 'one-job', action: 'verify', state: 'COMPLETE', progress: { phase: 'Done', unit: 'items', done: 1, total: 1, elapsed_seconds: 1, eta_seconds: null, idle_seconds: 0 }, result: { state: 'VERIFIED' } };
+        h.respond(url => {
+            if (url === '/api/task') return { task_id: task.id };
+            if (url === '/api/tasks') return [task];
+            if (url === '/api/task/' + task.id) return task;
+            return readAction(url) === 'status' ? { workspace: '/workspace', version: 'test' } : [];
+        });
+        const callback = () => { callbacks++; throw new Error('view render failed'); };
+        const first = h.api.work('verify', { bundle: '/archive' }, callback);
+        const second = h.api.work('verify', { bundle: '/archive' }, callback);
+        assert.equal(first, second);
+        await new Promise(resolve => setImmediate(resolve));
+        await h.api.polling();
+        const result = await first;
+        assert.equal(result.state, 'VERIFIED'); assert.equal(callbacks, 1);
+        assert.equal(h.requests.filter(r => r.url === '/api/task').length, 1);
+        assert(h.node('notice').textContent.includes('completed, but'));
+    });
+    await check('Duplicate modal submissions call the handler only once', async () => {
+        const h = harness(); let calls = 0, release;
+        h.api.dialog('Test submission', new Element('p'), 'Submit', () => { calls++; return new Promise(resolve => { release = resolve; }); });
+        const submit = h.node('dialog-form').listeners.submit[0];
+        const first = submit({ preventDefault() {} }); const second = submit({ preventDefault() {} });
+        assert.equal(calls, 1); assert.equal(h.node('dialog-submit').disabled, true);
+        release(); await Promise.all([first, second]); assert.equal(h.node('dialog-submit').disabled, false);
+    });
+    await check('Dialog fallback traps focus, handles Escape and returns focus', async () => {
+        const h = harness(), opener = h.node('new-scan'); opener.focus();
+        h.node('dialog').showModal = undefined; h.node('dialog').close = undefined;
+        for (const id of ['dialog-close', 'dialog-cancel', 'dialog-submit']) { h.node(id).tagName = 'BUTTON'; h.node(id).tabIndex = 0; h.node('dialog').append(h.node(id)); }
+        h.node('dialog').append(h.node('dialog-body'));
+        h.api.dialog('Fallback', new Element('p'), 'Continue', () => {});
+        h.node('dialog-submit').focus();
+        h.document.listeners.keydown[0]({ key: 'Tab', shiftKey: false, preventDefault() {} });
+        assert.equal(h.document.activeElement, h.node('dialog-close'));
+        h.document.listeners.keydown[0]({ key: 'Tab', shiftKey: true, preventDefault() {} });
+        assert.equal(h.document.activeElement, h.node('dialog-submit'));
+        assert(h.node('dialog').hasAttribute('open')); assert.equal(h.node('dialog-backdrop').hidden, false);
+        assert.equal(h.node('app-shell').getAttribute('aria-hidden'), 'true');
+        h.document.listeners.keydown[0]({ key: 'Escape', preventDefault() {} });
+        assert(!h.node('dialog').hasAttribute('open')); assert.equal(h.node('dialog-backdrop').hidden, true);
+        assert.equal(h.document.activeElement, opener);
+    });
+    await check('An older directory response cannot overwrite a newer selection in the same scan', async () => {
+        const h = harness(), pending = {};
+        Object.assign(h.api.S, { scan: 'scan-one', node: 1, scans: [{ id: 'scan-one', counts: { issues: 0 } }] });
+        h.respond(url => {
+            const action = readAction(url), args = readArgs(url);
+            if (action === 'browse') return new Promise(resolve => { pending[args.node_id] = resolve; });
+            return action === 'types' ? { total: 0, rows: [] } : [];
+        });
+        const older = h.api.tree(); h.api.S.node = 2; const newer = h.api.tree();
+        const response = (id, path) => ({ directory: { id, parent: 0, path }, rows: [], total: 0, scan: { id: 'scan-one', backend: 'fixture', counts: { eligible_files: 0, excluded: 0, errors: 0 } } });
+        pending[2](response(2, 'newer')); await newer;
+        pending[1](response(1, 'older')); await older;
+        assert.equal(h.node('tree-path').textContent, 'newer'); assert.equal(h.api.S.node, 2);
+    });
+    await check('Missing task records terminate waiters after successful reconnection without resubmission', async () => {
+        const h = harness(); let rejection;
+        h.api.waitingTasks.set('lost-task', { resolve() {}, reject: error => { rejection = error; } });
+        h.respond(() => []);
+        await h.api.polling(); await h.api.polling(); assert.equal(rejection, undefined);
+        await h.api.polling(); assert(rejection.message.includes('No operation was resubmitted'));
+        assert.equal(h.api.waitingTasks.size, 0); assert(h.requests.every(r => r.url === '/api/tasks'));
+    });
+    await check('Changed authentication session stops retries and asks for reload', async () => {
+        const h = harness(); let rejection;
+        h.api.waitingTasks.set('old-task', { resolve() {}, reject: error => { rejection = error; } });
+        h.respond(() => ({ error: { code: 'TOKEN', message: 'Session changed' } }));
+        await h.api.polling(); assert(rejection.message.includes('session changed'));
+        assert(h.node('connection-state').textContent.includes('reload')); assert.equal(h.api.waitingTasks.size, 0);
+    });
+    await check('Overall package counts stay distinct from active byte progress', async () => {
+        const h = harness();
+        h.api.renderProgress({ id: 't', action: 'build', state: 'RUNNING', progress: { phase: 'Hash package', unit: 'bytes', done: 200, total: 1000, elapsed_seconds: 10, idle_seconds: 0, overall: { done: 1, total: 3, unit: 'packages' }, package: { id: 'P000002', index: 2, total: 3 } } });
+        assert(h.node('task-overall').textContent.includes('1 of 3 packages'));
+        assert(h.node('task-package').textContent.includes('2 of 3'));
+        assert.equal(h.node('task-progress').value, 200); assert.equal(h.node('task-overall-progress').value, 1);
+    });
+    await check('Build review explains retained staging separately from a later destination copy', async () => {
+        const h = harness(), panel = h.api.reviewSpaces('build', { output: '/staging', estimated_required_bytes: 4096, free_bytes: 8192, capacity_breakdown: { basis: 'Remaining retained packages' } });
+        assert(panel.textContent.includes('Staging · retained archive set'));
+        assert(panel.textContent.includes('Final destination · separate copy'));
+        assert(panel.textContent.includes('not just the largest package'));
     });
     console.log(JSON.stringify({ method: 'Shipped JavaScript handlers in a minimal DOM; not browser/CSS/CSP qualification', checks: records, count: records.length }, null, 2));
 })().catch(error => { console.error(error); process.exitCode = 1; });

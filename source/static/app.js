@@ -4,11 +4,15 @@ const PAGE_SIZE = 100;
 const S = { status: null, doctor: null, scans: [], plans: [], builds: [], replicas: [], destinations: [], view: 'sources', scan: null, scanRecord: null, node: null, parent: null, treeOffset: 0, plan: null, planRecord: null, packages: [], package: null, packageRecord: null, packagePlan: null, packageOffset: 0, memberOffset: 0, selected: new Set(), members: new Set(), tasks: [], active: null, appearance: 'system', offsets: {}, more: {}, recoveryPackages: null, recoverySearch: null, recoveryOffset: 0 };
 const listButtons = { scans: 'scan-load-more', plans: 'plan-load-more', builds: 'build-load-more', replicas: 'replica-load-more' };
 const waitingTasks = new Map();
+const submittedWork = new Map(), readVersions = {}, pendingLists = {};
 let pollingTimer = null, pollingBusy = false, serviceStopped = false;
+let workspaceVersion = 0;
+function beginRead(key) { readVersions[key] = (readVersions[key] || 0) + 1; return { version: readVersions[key], workspace: workspaceVersion }; }
+function currentRead(key, ticket) { return ticket.workspace === workspaceVersion && ticket.version === readVersions[key]; }
 function el(tag, text, cls) { const e = document.createElement(tag); if (text !== undefined)
     e.textContent = String(text); if (cls)
     e.className = cls; return e; }
-function clear(e) { e.replaceChildren(); return e; }
+function clear(e) { e.textContent = ''; return e; }
 function size(n) { n = Number(n) || 0; function fmt(b, u) { let x = n, i = 0; while (x >= b && i < u.length - 1) {
     x /= b;
     i++;
@@ -22,8 +26,10 @@ async function request(url, body) { const opts = { headers: { 'X-AP20-Token': to
     opts.method = 'POST';
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);
-} const response = await fetch(url, opts); const value = await response.json(); if (!response.ok || value.error)
-    throw new Error(value.error ? `${value.error.code}: ${value.error.message}` : `HTTP ${response.status}`); return value; }
+} const response = await fetch(url, opts); const value = await response.json(); if (!response.ok || value.error) {
+    const error = new Error(value.error ? `${value.error.code}: ${value.error.message}` : `HTTP ${response.status}`);
+    error.code = value.error ? value.error.code : 'HTTP'; error.status = response.status; throw error;
+} return value; }
 const read = (action, args = {}) => request(`/api/read?action=${encodeURIComponent(action)}&args=${encodeURIComponent(JSON.stringify(args))}`);
 const safe = fn => (...args) => Promise.resolve().then(() => fn(...args)).catch(e => notice(e.message, true));
 function button(text, fn, cls) { const b = el('button', text, cls); b.type = 'button'; b.addEventListener('click', safe(fn)); return b; }
@@ -33,7 +39,7 @@ function planLabel(p) {
     return `${p.label} · ${p.counts.packages} packages · ${p.state} · ${created} · ${p.id}`;
 }
 function reasonText(reason) {
-    return ({ DIRECT_FILES_TOGETHER: 'Direct files kept together.', LOOSE_FILES_SPLIT_LOCALLY: 'Loose files split within their parent directory to meet the package target.', WHOLE_DIRECTORY: 'A complete directory fits within the package limit.', WHOLE_SIBLINGS_COMBINED: 'Small sibling directories kept whole and grouped together.', DIRECTORY_METADATA: 'Directory structure and metadata recorded separately.', MANUAL_CODEC: 'Encoding changed in a saved revision.', MANUAL_MERGE: 'Packages merged by the operator.', MANUAL_MOVE: 'Membership changed by the operator.' })[reason] || String(reason || '').replaceAll('_', ' ').toLowerCase();
+    return ({ DIRECT_FILES_TOGETHER: 'Direct files kept together.', LOOSE_FILES_SPLIT_LOCALLY: 'Loose files split within their parent directory to meet the package target.', WHOLE_DIRECTORY: 'A complete directory fits within the package limit.', WHOLE_SIBLINGS_COMBINED: 'Small sibling directories kept whole and grouped together.', DIRECTORY_METADATA: 'Directory structure and metadata recorded separately.', MANUAL_CODEC: 'Encoding changed in a saved revision.', MANUAL_MERGE: 'Packages merged by the operator.', MANUAL_MOVE: 'Membership changed by the operator.' })[reason] || String(reason || '').replace(/_/g, ' ').toLowerCase();
 }
 function planActions() {
     $('merge-packages').disabled = !S.plan || S.selected.size < 2;
@@ -52,6 +58,7 @@ function clearPackage() {
     planActions();
 }
 function selectPlan(id) {
+    beginRead('packages'); beginRead('members');
     S.plan = id || null; S.planRecord = null; S.packages = [];
     S.selected.clear(); S.packageOffset = 0; clearPackage();
     for (const target of ['package-rows', 'package-pages', 'plan-summary', 'plan-revision-note', 'allocation-results']) clear($(target));
@@ -59,20 +66,25 @@ function selectPlan(id) {
 }
 async function packageDetail() {
     if (!S.plan || !S.package) throw new Error('Select a package.');
-    const plan = S.plan, id = S.package;
-    if (S.packagePlan === plan && S.packageRecord?.id === id) return S.packageRecord;
+    const plan = S.plan, id = S.package, workspace = workspaceVersion;
+    if (S.packagePlan === plan && S.packageRecord && S.packageRecord.id === id) return S.packageRecord;
     const value = await read('package', { plan_id: plan, package_id: id });
-    if (S.plan !== plan || S.package !== id) throw new Error('Package selection changed; try the action again.');
+    if (S.plan !== plan || S.package !== id || workspace !== workspaceVersion) throw new Error('Package selection changed; try the action again.');
     S.packageRecord = value; S.packagePlan = plan; planActions();
     return value;
 }
 async function loadList(kind, append = false) {
+    if (append && pendingLists[kind]) return pendingLists[kind];
+    const ticket = beginRead('list-' + kind);
     const offset = append ? (S.offsets[kind] || 0) : 0;
-    const rows = await read(kind, { limit: PAGE_SIZE, offset });
-    S[kind] = append ? [...new Map([...S[kind], ...rows].map(r => [r.id, r])).values()] : rows;
-    S.offsets[kind] = offset + rows.length; S.more[kind] = rows.length === PAGE_SIZE;
-    $(listButtons[kind]).hidden = !S.more[kind];
-    return rows;
+    const request = read(kind, { limit: PAGE_SIZE, offset }).then(rows => {
+        if (!currentRead('list-' + kind, ticket)) return rows;
+        S[kind] = append ? [...new Map([...S[kind], ...rows].map(r => [r.id, r])).values()] : rows;
+        S.offsets[kind] = offset + rows.length; S.more[kind] = rows.length === PAGE_SIZE;
+        $(listButtons[kind]).hidden = !S.more[kind]; return rows;
+    });
+    pendingLists[kind] = request;
+    try { return await request; } finally { if (pendingLists[kind] === request) delete pendingLists[kind]; }
 }
 function field(title, value = '', type = 'text', hint = '') { const label = el('label', title); const input = el('input'); input.type = type; input.setAttribute('aria-label', title); if (type === 'number') input.step = 'any'; input.value = value; if (hint)
     input.title = hint; label.append(input); return { label, input }; }
@@ -82,18 +94,54 @@ function select(title, options, value) { const label = el('label', title), input
     input.append(o);
 } input.value = value; label.append(input); return { label, input }; }
 function checkbox(title, value = false) { const label = el('label', undefined, 'check'), input = el('input'); input.type = 'checkbox'; input.checked = value; label.append(input, document.createTextNode(title)); return { label, input }; }
-let onSubmit = null;
-function dialog(title, body, submit = 'Continue', handler = null) { $('dialog-title').textContent = title; $('dialog-body').replaceChildren(...(Array.isArray(body) ? body : [body])); $('dialog-error').textContent = ''; $('dialog-submit').textContent = submit; $('dialog-submit').hidden = !handler; onSubmit = handler; $('dialog').showModal(); }
-function closeDialog() { $('dialog').close(); onSubmit = null; }
+let onSubmit = null, submitBusy = false, dialogVersion = 0, dialogReturnFocus = null;
+function dialogOpen() { return $('dialog').hasAttribute('open'); }
+function focusDialog() {
+    const target = $('dialog-body').querySelector('input:not(:disabled), select:not(:disabled), button:not(:disabled)') || $('dialog-submit');
+    (target.hidden ? $('dialog-close') : target).focus();
+}
+function dialog(title, body, submit = 'Continue', handler = null) {
+    if (!dialogOpen()) dialogReturnFocus = document.activeElement;
+    dialogVersion++; submitBusy = false;
+    $('dialog-title').textContent = title; clear($('dialog-body')).append(...(Array.isArray(body) ? body : [body]));
+    $('dialog-error').textContent = ''; $('dialog-submit').textContent = submit; $('dialog-submit').hidden = !handler; $('dialog-submit').disabled = false; onSubmit = handler;
+    const modal = $('dialog');
+    document.body.classList.add('modal-open');
+    if (!dialogOpen()) {
+        if (typeof modal.showModal === 'function') modal.showModal();
+        else { modal.setAttribute('open', ''); modal.classList.add('fallback-dialog'); $('dialog-backdrop').hidden = false; $('app-shell').setAttribute('aria-hidden', 'true'); }
+    }
+    if (typeof window !== 'undefined' && window.ArchivistBootstrap) window.ArchivistBootstrap.disclosures($('dialog-body'));
+    focusDialog();
+}
+function closeDialog() {
+    const modal = $('dialog'); dialogVersion++; onSubmit = null; submitBusy = false;
+    if (typeof modal.close === 'function' && dialogOpen()) modal.close(); else modal.removeAttribute('open');
+    $('dialog-backdrop').hidden = true; $('app-shell').removeAttribute('aria-hidden');
+    document.body.classList.remove('modal-open');
+    if (dialogReturnFocus && document.documentElement.contains(dialogReturnFocus)) dialogReturnFocus.focus();
+}
 $('dialog-close').onclick = closeDialog;
 $('dialog-cancel').onclick = closeDialog;
-$('dialog-form').addEventListener('submit', async (e) => { e.preventDefault(); if (!onSubmit)
-    return; try {
-    await onSubmit();
-}
-catch (error) {
-    if ($('dialog').open) $('dialog-error').textContent = error.message; else notice(error.message, true);
-} });
+$('dialog').addEventListener('cancel', e => { e.preventDefault(); closeDialog(); });
+document.addEventListener('keydown', e => {
+    if (!dialogOpen()) { if (e.key === 'Escape') $('file-menu').open = false; return; }
+    if (e.key === 'Escape') { e.preventDefault(); closeDialog(); return; }
+    if (e.key !== 'Tab') return;
+    const controls = Array.from($('dialog').querySelectorAll('button, input, select, textarea, a[href], [tabindex]')).filter(x => !x.disabled && !x.hidden && x.tabIndex !== -1 && x.getClientRects().length);
+    if (!controls.length) { e.preventDefault(); $('dialog').focus(); return; }
+    const first = controls[0], last = controls[controls.length - 1];
+    if (e.shiftKey && (document.activeElement === first || !$('dialog').contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && (document.activeElement === last || !$('dialog').contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+});
+document.addEventListener('focusin', e => { if (dialogOpen() && !$('dialog').contains(e.target)) focusDialog(); });
+$('dialog-form').addEventListener('submit', async (e) => {
+    e.preventDefault(); if (!onSubmit || submitBusy) return;
+    const handler = onSubmit, version = dialogVersion; submitBusy = true; $('dialog-submit').disabled = true;
+    try { await handler(); }
+    catch (error) { if (dialogOpen() && version === dialogVersion) $('dialog-error').textContent = error.message; else notice(error.message, true); }
+    finally { if (version === dialogVersion) { submitBusy = false; $('dialog-submit').disabled = false; } }
+});
 function pager(container, total, offset, step, fn) { clear(container); container.append(el('span', total ? `${offset + 1}–${Math.min(total, offset + step)} of ${total.toLocaleString()}` : '0 records')); const prev = button('Previous', () => fn(Math.max(0, offset - step))), next = button('Next', () => fn(offset + step)); prev.disabled = offset === 0; next.disabled = offset + step >= total; container.append(prev, next); }
 let preferenceTimer;
 function prefs() { clearTimeout(preferenceTimer); preferenceTimer = setTimeout(() => { if (S.active)
@@ -107,7 +155,9 @@ document.querySelectorAll('[data-view]').forEach(b => b.onclick = safe(async () 
     await archiveView(); }));
 $('appearance').onchange = () => appearance($('appearance').value);
 async function refresh() {
+    const ticket = beginRead('refresh');
     const [status, , , dest] = await Promise.all([read('status'), loadList('scans'), loadList('plans'), read('destinations')]);
+    if (!currentRead('refresh', ticket)) return;
     S.status = status; S.destinations = dest;
     $('app-version').textContent = status.version;
     $('workspace-name').textContent = status.workspace; $('workspace-name').title = status.workspace;
@@ -118,19 +168,81 @@ async function refresh() {
     planActions();
 }
 $('refresh').onclick = safe(refresh);
-async function work(action, args, completed) {
-    const response = await request('/api/task', { action, args });
-    notice(`Queued: ${action.replaceAll('_', ' ')}`);
-    const finished = new Promise((resolve, reject) => waitingTasks.set(response.task_id, { resolve, reject }));
+function work(action, args, completed) {
+    const key = workspaceVersion + ':' + action + ':' + JSON.stringify(args);
+    if (submittedWork.has(key)) return submittedWork.get(key);
+    const promise = runWork(action, args, completed);
+    submittedWork.set(key, promise);
+    promise.then(() => submittedWork.delete(key), () => submittedWork.delete(key));
+    return promise;
+}
+async function runWork(action, args, completed) {
+    const workspace = workspaceVersion;
+    let response;
+    try { response = await request('/api/task', { action, args }); }
+    catch (error) {
+        if (!error.status) throw new Error('Submission could not be confirmed. Check Activity before retrying; the local service may already have accepted the operation. ' + error.message);
+        throw error;
+    }
+    notice(`Queued: ${action.replace(/_/g, ' ')}`);
+    const finished = new Promise((resolve, reject) => waitingTasks.set(response.task_id, { resolve, reject, absent: 0 }));
     schedulePolling(0);
     const t = await finished;
-    await refresh();
-    notice(`${action.replaceAll('_', ' ')}: complete`);
-    if (completed) await completed(t.result);
+    if (workspace !== workspaceVersion) return t.result;
+    let refreshError = null;
+    try { await refresh(); } catch (error) { refreshError = error; }
+    if (workspace !== workspaceVersion) return t.result;
+    notice(`${action.replace(/_/g, ' ')}: complete`);
+    if (completed) {
+        try { await completed(t.result); }
+        catch (error) { refreshError = error; }
+    }
+    if (refreshError) notice(`${action.replace(/_/g, ' ')} completed, but the recorded view could not be refreshed. Use Refresh to reconnect. ${refreshError.message}`, true);
     return t.result;
 }
-async function reviewAndRun(action, args) { closeDialog(); const r = await work('preflight_' + action, args); const pre = el('details'), summary = el('summary', 'Exact review record'), facts = el('dl', undefined, 'review-facts'); pre.append(summary, el('pre', JSON.stringify(r, null, 2))); for (const [title, value] of [['Action', action], ['Source', r.archive_set || r.plan_id], ['Destination', r.output || r.target], ['Packages', r.packages?.join(', ')], ['Bytes', r.logical_bytes || r.actual_payload_bytes || r.estimated_required_bytes], ['Excluded observations', r.excluded_observations]]) { if (value !== undefined) facts.append(el('dt', title), el('dd', title === 'Bytes' ? size(value) : value)); } dialog(`Review ${action}`, [el('p', action === 'restore' ? 'Writes only to the new destination shown below. Existing files are never overwritten.' : 'Confirm the source, selection and destination. Original files are retained.'), facts, pre], `Confirm ${action}`, async () => { closeDialog(); await work(action, { ...args, approval: r.approval }, result => { notice(`${action}: ${result.state || 'complete'}`); if (action === 'restore')
-    showRecovery(result); }); }); }
+function spaceReview(title, path, required, available, description) {
+    const panel = el('section', undefined, 'space-review'); panel.append(el('h3', title));
+    if (path) panel.append(el('p', path, 'path'));
+    if (required !== undefined && required !== null) panel.append(el('p', `Additional space required now: ${size(required)}`));
+    if (available !== undefined && available !== null) {
+        panel.append(el('p', `Available for this operation: ${size(available)}`));
+        if (required !== undefined && required !== null && available > 0) {
+            const bar = el('div', undefined, 'fit-bar'), fill = el('span');
+            fill.style.width = `${Math.min(100, 100 * required / available)}%`;
+            bar.setAttribute('role', 'img'); bar.setAttribute('aria-label', `${size(required)} needed out of ${size(available)} available`); bar.append(fill); panel.append(bar);
+        }
+    }
+    panel.append(el('p', description, 'muted')); return panel;
+}
+function reviewSpaces(action, review) {
+    const panels = el('div', undefined, 'review-spaces'), capacity = review.capacity_breakdown || {};
+    if (action === 'build') {
+        panels.append(spaceReview('Staging · retained archive set', review.output, review.estimated_required_bytes, review.free_bytes, 'All remaining selected packages and metadata are retained together. Staging is not just the largest package; completed artifacts are kept for later copies.'));
+        panels.append(spaceReview('Final destination · separate copy', '', null, null, 'No destination write is part of this build. Choose a destination after building; copy preflight checks its identity, capacity, reserve and required metadata.'));
+    } else if (action === 'copy') {
+        panels.append(spaceReview('Staging · existing source artifacts', review.archive_set, null, null, 'Verified artifacts are read from this archive set. They remain available for additional replicas.'));
+        panels.append(spaceReview('Final destination · this replica', review.target, review.estimated_additional_bytes, review.observed_free_bytes, 'Available space is reported after the configured reserve. Package objects, recovery files and metadata headroom are charged; validated partial copies may reduce the additional requirement.'));
+        if (review.configured_remaining_bytes !== null && review.configured_remaining_bytes !== undefined) panels.append(el('p', `Configured destination budget remaining: ${size(review.configured_remaining_bytes)}. This is a separate limit from observed free space.`, 'muted'));
+        if (review.metadata_completeness && review.metadata_completeness !== 'complete') panels.append(el('p', recoveryMetadataText(review), 'error'));
+    } else {
+        panels.append(spaceReview('Restore destination', review.output, review.logical_bytes, review.free_bytes, 'Restoration writes a new directory. The source archive remains in place.'));
+    }
+    if (capacity.basis) panels.append(el('p', 'Capacity basis: ' + capacity.basis, 'muted'));
+    return panels;
+}
+async function reviewAndRun(action, args) {
+    const workspace = workspaceVersion; closeDialog();
+    const r = await work('preflight_' + action, args);
+    if (workspace !== workspaceVersion) return;
+    const pre = el('details'), facts = el('dl', undefined, 'review-facts');
+    pre.append(el('summary', 'Exact review record'), el('pre', JSON.stringify(r, null, 2)));
+    for (const [title, value] of [['Action', action], ['Source', r.archive_set || r.plan_id], ['Packages', r.packages && r.packages.join(', ')], ['Excluded observations', r.excluded_observations]]) {
+        if (value !== undefined) facts.append(el('dt', title), el('dd', value));
+    }
+    dialog(`Review ${action}`, [el('p', action === 'restore' ? 'Writes only to the new destination shown below. Existing files are never overwritten.' : 'Confirm the source, package selection and storage locations.'), facts, reviewSpaces(action, r), pre], `Confirm ${action}`, async () => {
+        closeDialog(); await work(action, Object.assign({}, args, { approval: r.approval }), result => { notice(`${action}: ${result.state || 'complete'}`); if (action === 'restore') showRecovery(result); });
+    });
+}
 function renderScans() { const box = clear($('scan-list')); if (!S.scans.length) {
     box.append(el('p', 'No recorded sources. Scan one directory to begin.', 'empty'));
     return;
@@ -141,7 +253,7 @@ function renderScans() { const box = clear($('scan-list')); if (!S.scans.length)
     box.append(b);
 } }
 async function tree() { if (!S.scan)
-    return; const scanId = S.scan; const r = await read('browse', { snapshot_id: scanId, node_id: S.node, offset: S.treeOffset }); if (S.scan !== scanId) return; S.scanRecord = { ...(S.scans.find(x => x.id === scanId) || S.scanRecord || {}), ...r.scan }; S.node = r.directory.id; S.parent = r.directory.parent; $('tree-path').textContent = r.directory.path || '/'; $('tree-up').disabled = S.parent === null; const summary = clear($('scan-summary')); for (const text of [`${r.scan.backend} acquisition`, `${r.scan.counts.eligible_files} included files`, `${r.scan.counts.excluded} excluded`, `${r.scan.counts.errors} errors`])
+    return; const ticket = beginRead('tree'), scanId = S.scan; const r = await read('browse', { snapshot_id: scanId, node_id: S.node, offset: S.treeOffset }); if (S.scan !== scanId || !currentRead('tree', ticket)) return; S.scanRecord = Object.assign({}, S.scans.find(x => x.id === scanId) || S.scanRecord || {}, r.scan); S.node = r.directory.id; S.parent = r.directory.parent; $('tree-path').textContent = r.directory.path || '/'; $('tree-up').disabled = S.parent === null; const summary = clear($('scan-summary')); for (const text of [`${r.scan.backend} acquisition`, `${r.scan.counts.eligible_files} included files`, `${r.scan.counts.excluded} excluded`, `${r.scan.counts.errors} errors`])
     summary.append(el('span', text)); const rows = clear($('tree-rows')); for (const n of r.rows) {
     const tr = el('tr'), name = el('td');
     if (n.kind === 'directory')
@@ -153,14 +265,14 @@ async function tree() { if (!S.scan)
 } pager($('tree-pages'), r.total, S.treeOffset, 100, async (n) => { S.treeOffset = n; await tree(); }); await typesAndIssues(); }
 $('tree-up').onclick = safe(async () => { S.node = S.parent; S.treeOffset = 0; await tree(); });
 async function typesAndIssues() { if (!S.scan)
-    return; const [types, issues] = await Promise.all([read('types', { snapshot_id: S.scan, limit: 1000 }), read('issues', { snapshot_id: S.scan, limit: 100 })]); const list = clear($('type-list')); list.append(el('h2', `${types.total} observed suffixes`)); if (types.total > types.rows.length) list.append(el('p', `Showing ${types.rows.length} of ${types.total}; use CLI pagination or the full scan export for the remainder.`, 'muted')); for (const t of types.rows) {
+    return; const ticket = beginRead('types'), scanId = S.scan; const [types, issues] = await Promise.all([read('types', { snapshot_id: scanId, limit: 1000 }), read('issues', { snapshot_id: scanId, limit: 100 })]); if (S.scan !== scanId || !currentRead('types', ticket)) return; const list = clear($('type-list')); list.append(el('h2', `${types.total} observed suffixes`)); if (types.total > types.rows.length) list.append(el('p', `Showing ${types.rows.length} of ${types.total}; use CLI pagination or the full scan export for the remainder.`, 'muted')); for (const t of types.rows) {
     list.append(el('p', `${t.extension ? '.' + t.extension : '(no extension)'} · ${t.files.toLocaleString()} files · ${size(t.bytes)} · ${t.class}`));
-} const errors = clear($('issue-list')); errors.append(el('h2', 'Recorded issues')); const count = S.scans.find(s => s.id === S.scan)?.counts.issues || 0; if (count > issues.length) errors.append(el('p', `Showing ${issues.length} of ${count}; CLI and full scan export retain every issue.`, 'muted')); if (!issues.length)
+} const errors = clear($('issue-list')); errors.append(el('h2', 'Recorded issues')); const scan = S.scans.find(s => s.id === S.scan), count = scan ? scan.counts.issues || 0 : 0; if (count > issues.length) errors.append(el('p', `Showing ${issues.length} of ${count}; CLI and full scan export retain every issue.`, 'muted')); if (!issues.length)
     errors.append(el('p', 'No acquisition issues recorded. This does not establish full filesystem-metadata fidelity.')); for (const i of issues) {
     const p = el('p', `${i.code} · ${i.path} · ${i.detail}`, i.severity === 'error' ? 'error' : '');
     errors.append(p);
 } }
-function newScan() { const root = field('Source directory', '', 'text', 'Absolute local or mounted path. Source content is never modified.'), label = field('Label (optional)'), backend = select('Acquisition', [['everything', 'Everything · required, no fallback'], ['filesystem', 'Filesystem · enumerate directly'], ['auto', 'Auto · report any fallback']], S.doctor?.platform.startsWith('Windows') ? 'everything' : 'filesystem'), es = field('es.exe path (Windows Everything only)'), instance = field('Everything instance', '1.5a'), hash = checkbox('Read every file now and record SHA-256 (slower)', false); backend.input.addEventListener('change', () => { hash.input.disabled = backend.input.value !== 'filesystem'; if (hash.input.disabled) hash.input.checked = false; }); backend.input.dispatchEvent(new Event('change')); dialog('Scan source', [root.label, label.label, backend.label, es.label, instance.label, hash.label, el('p', 'The index is an observation, not a frozen snapshot. Everything requires a running instance and the separate ES client.', 'muted')], 'Scan', async () => { if (!root.input.value.trim())
+function newScan() { const root = field('Source directory', '', 'text', 'Absolute local or mounted path. Source content is never modified.'), label = field('Label (optional)'), backend = select('Acquisition', [['everything', 'Everything · required, no fallback'], ['filesystem', 'Filesystem · enumerate directly'], ['auto', 'Auto · report any fallback']], S.doctor && S.doctor.platform.startsWith('Windows') ? 'everything' : 'filesystem'), es = field('es.exe path (Windows Everything only)'), instance = field('Everything instance', '1.5a'), hash = checkbox('Read every file now and record SHA-256 (slower)', false); backend.input.addEventListener('change', () => { hash.input.disabled = backend.input.value !== 'filesystem'; if (hash.input.disabled) hash.input.checked = false; }); backend.input.dispatchEvent(new Event('change')); dialog('Scan source', [root.label, label.label, backend.label, es.label, instance.label, hash.label, el('p', 'The index is an observation, not a frozen snapshot. Everything requires a running instance and the separate ES client.', 'muted')], 'Scan', async () => { if (!root.input.value.trim())
     throw new Error('Enter a source directory.'); const args = { root: root.input.value, label: label.input.value || null, backend: backend.input.value, es: es.input.value || null, instance: instance.input.value, hash_files: hash.input.checked }; closeDialog(); await work('scan', args, async (r) => { S.scan = r.snapshot_id; S.node = null; view('sources'); renderScans(); await tree(); notice(`Scan complete · actual backend: ${r.backend} · ${r.counts.errors} errors · ${r.counts.excluded} excluded`); }); }); }
 $('new-scan').onclick = newScan;
 function newPlan() { const eligible = S.scans.filter(s => ['COMPLETE', 'REVIEW'].includes(s.state)); const chosen = el('div', undefined, 'object-checks'), checks = []; for (const s of eligible) {
@@ -181,7 +293,7 @@ $('plan-select').onchange = safe(async () => { selectPlan($('plan-select').value
 $('scan-load-more').onclick = safe(async () => { await loadList('scans', true); renderScans(); });
 $('plan-load-more').onclick = safe(async () => { await loadList('plans', true); renderPlanSelector(); });
 async function packages() { if (!S.plan)
-    return; const planId = S.plan, offset = S.packageOffset; const r = await read('packages', { plan_id: planId, offset }); if (S.plan !== planId || S.packageOffset !== offset) return; S.packages = r.packages; S.planRecord = r.plan; renderPlanSelector(); const revision = clear($('plan-revision-note')); revision.append(el('span', `Saved ${r.plan.created}. ${r.plan.parent_plan ? 'Revision of ' + r.plan.parent_plan + '.' : 'Original plan.'} Membership was checked when this revision was saved.`)); if (r.plan.parent_plan) revision.append(button('Open previous revision', async () => { selectPlan(r.plan.parent_plan); await packages(); prefs(); }, 'link')); const summary = clear($('plan-summary')); for (const text of [r.plan.state, `${r.plan.counts.files.toLocaleString()} files`, size(r.plan.counts.logical_bytes), `${r.total} packages`, `${r.plan.counts.excluded_observations} excluded`])
+    return; const ticket = beginRead('packages'), planId = S.plan, offset = S.packageOffset; const r = await read('packages', { plan_id: planId, offset }); if (S.plan !== planId || S.packageOffset !== offset || !currentRead('packages', ticket)) return; S.packages = r.packages; S.planRecord = r.plan; renderPlanSelector(); const revision = clear($('plan-revision-note')); revision.append(el('span', `Saved ${r.plan.created}. ${r.plan.parent_plan ? 'Revision of ' + r.plan.parent_plan + '.' : 'Original plan.'} Membership was checked when this revision was saved.`)); if (r.plan.parent_plan) revision.append(button('Open previous revision', async () => { selectPlan(r.plan.parent_plan); await packages(); prefs(); }, 'link')); const summary = clear($('plan-summary')); for (const text of [r.plan.state, `${r.plan.counts.files.toLocaleString()} files`, size(r.plan.counts.logical_bytes), `${r.total} packages`, `${r.plan.counts.excluded_observations} excluded`])
     summary.append(el('span', text)); const rows = clear($('package-rows')); for (const p of r.packages) {
     const tr = el('tr');
     tr.dataset.select = p.id;
@@ -214,7 +326,7 @@ async function packages() { if (!S.plan)
 } pager($('package-pages'), r.total, S.packageOffset, 100, async (n) => { S.packageOffset = n; await packages(); }); if (S.package && (!S.packageRecord || S.packagePlan !== S.plan)) await members();
 else if (!S.package) clearPackage(); planActions(); prefs(); }
 async function members() { if (!S.package)
-    return; const planId = S.plan, packageId = S.package, offset = S.memberOffset; const [r, p] = await Promise.all([read('members', { plan_id: planId, package_id: packageId, offset }), packageDetail()]); if (S.plan !== planId || S.package !== packageId || S.memberOffset !== offset) return; $('package-name').textContent = packageId; $('package-reason').textContent = `${reasonText(p.reason)} Estimated archive budget: ${size(p.estimated_bytes)}. Not a compression forecast.`; const rows = clear($('member-rows')); for (const m of r.rows) {
+    return; const ticket = beginRead('members'), planId = S.plan, packageId = S.package, offset = S.memberOffset; const [r, p] = await Promise.all([read('members', { plan_id: planId, package_id: packageId, offset }), packageDetail()]); if (S.plan !== planId || S.package !== packageId || S.memberOffset !== offset || !currentRead('members', ticket)) return; $('package-name').textContent = packageId; $('package-reason').textContent = `${reasonText(p.reason)} Estimated archive budget: ${size(p.estimated_bytes)}. Not a compression forecast.`; const rows = clear($('member-rows')); for (const m of r.rows) {
     const tr = el('tr'), c = el('td'), box = el('input');
     box.type = 'checkbox';
     box.disabled = m.kind !== 'file';
@@ -261,12 +373,12 @@ $('move-members').onclick = safe(async () => {
     await loadTargets();
 });
 $('sample-codec').onclick = safe(async () => { if (!S.package)
-    throw new Error('Select a payload package.'); dialog('Read compression samples', el('p', 'Reads up to 32 MiB from start, middle and end windows of the largest files. This is a biased sample, not a guaranteed ratio for the archive. No settings will change.'), 'Read and test', async () => { closeDialog(); await work('sample', { plan_id: S.plan, package_id: S.package }, r => { const out = clear($('sample-results')); out.append(el('h2', 'Measured sample only')); for (const v of r.results)
+    throw new Error('Select a payload package.'); const planId = S.plan, packageId = S.package; dialog('Read compression samples', el('p', 'Reads up to 32 MiB from start, middle and end windows of the largest files. This is a biased sample, not a guaranteed ratio for the archive. No settings will change.'), 'Read and test', async () => { closeDialog(); await work('sample', { plan_id: planId, package_id: packageId }, r => { if (S.plan !== planId || S.package !== packageId) { notice('Sample complete for ' + packageId + '. Select that package to run a fresh sample.'); return; } const out = clear($('sample-results')); out.append(el('h2', 'Measured sample only')); for (const v of r.results)
     out.append(el('p', `${v.codec} ${v.level} · ${(100 * v.encoded_input_ratio).toFixed(1)}% of input · ${duration(v.encode_seconds)} encode / ${duration(v.decode_seconds)} decode`)); out.append(el('p', r.basis, 'muted')); }); }); });
 $('media-preset').onchange = () => { $('media-capacity').value = $('media-preset').value; };
 $('fit-media').onclick = safe(async () => { if (!S.plan)
-    throw new Error('Select a plan.'); const n = Number($('media-count').value), capacity = Math.round(Number($('media-capacity').value) * 1e9), reserve = Math.round(capacity * Number($('media-reserve').value) / 100); if (!Number.isInteger(n) || n < 1 || n > 50 || !Number.isSafeInteger(capacity) || capacity <= 0 || !Number.isSafeInteger(reserve) || reserve < 0 || reserve >= capacity)
-    throw new Error('Choose 1 to 50 media, a positive capacity, and a reserve below that capacity.'); const r = await read('allocate', { plan_id: S.plan, media: Array.from({ length: n }, (_, i) => ({ id: `Medium ${i + 1}`, capacity, reserve, occupied: 0, max_file: capacity })) }); const out = clear($('allocation-results')); for (const m of r.media) {
+    throw new Error('Select a plan.'); const ticket = beginRead('allocation'), planId = S.plan, n = Number($('media-count').value), capacity = Math.round(Number($('media-capacity').value) * 1e9), reserve = Math.round(capacity * Number($('media-reserve').value) / 100); if (!Number.isInteger(n) || n < 1 || n > 50 || !Number.isSafeInteger(capacity) || capacity <= 0 || !Number.isSafeInteger(reserve) || reserve < 0 || reserve >= capacity)
+    throw new Error('Choose 1 to 50 media, a positive capacity, and a reserve below that capacity.'); const r = await read('allocate', { plan_id: planId, media: Array.from({ length: n }, (_, i) => ({ id: `Medium ${i + 1}`, capacity, reserve, occupied: 0, max_file: capacity })) }); if (S.plan !== planId || !currentRead('allocation', ticket)) return; const out = clear($('allocation-results')); for (const m of r.media) {
     const panel = el('div', undefined, 'fit'), title = el('div', undefined, 'fit-title');
     title.append(el('strong', m.id), el('span', `${size(m.used)} used · ${m.packages.length} packages`));
     const bar = el('div', undefined, 'fit-bar');
@@ -278,14 +390,17 @@ $('fit-media').onclick = safe(async () => { if (!S.plan)
     reserved.title = 'Configured reserve';
     bar.append(fill, reserved);
     panel.append(title, bar);
-    if (m.missing_metadata_package_ids?.length) panel.append(el('p', `Directory metadata also needed: ${m.missing_metadata_package_ids.join(', ')}. These additional copies are not included in this bin's footprint.`, 'error'));
+    panel.append(el('p', 'Package selection for this medium (including required directory metadata):', 'muted'), el('pre', m.packages.join(', '), 'medium-packages'));
+    if (m.directory_metadata_bytes !== undefined) panel.append(el('p', `Directory metadata charged on this medium: ${size(m.directory_metadata_bytes)}.`, 'muted'));
+    if (m.replicated_metadata_package_ids && m.replicated_metadata_package_ids.length) panel.append(el('p', 'Metadata also present on other media: ' + m.replicated_metadata_package_ids.join(', ') + '. Each physical copy is charged.', 'muted'));
+    if (m.missing_metadata_package_ids && m.missing_metadata_package_ids.length) panel.append(el('p', `Directory metadata also needed: ${m.missing_metadata_package_ids.join(', ')}. This medium does not yet have a complete recovery selection.`, 'error'));
     out.append(panel);
-} out.append(el('p', r.unallocated.length ? `Unallocated: ${r.unallocated.join(', ')}` : 'All package objects fit this capacity model. Copy preflight still checks the destination.', r.unallocated.length ? 'error' : 'good')); if (r.metadata_dependencies_complete === false) out.append(el('p', 'Some media still need directory metadata copies for complete metadata-preserving recovery. Review the missing package IDs above.', 'error')); out.append(el('p', `Size basis: ${r.measurement?.basis || 'estimated'}. ${r.basis}`, 'muted')); });
+} if (r.physical_replication) out.append(el('p', `Additional directory-metadata copies across media: ${r.physical_replication.additional_metadata_copies} · ${size(r.physical_replication.additional_metadata_bytes)}. Logical file membership remains exact once.`, 'muted')); out.append(el('p', r.unallocated.length ? `Unallocated: ${r.unallocated.join(', ')}` : 'All package objects fit this capacity model. Copy preflight still checks the destination.', r.unallocated.length ? 'error' : 'good')); if (r.metadata_dependencies_complete === false) out.append(el('p', 'Some media still need directory metadata copies for complete metadata-preserving recovery. Review the missing package IDs above.', 'error')); out.append(el('p', `Size basis: ${(r.measurement && r.measurement.basis) || 'estimated'}. ${r.basis}`, 'muted')); });
 function buildDialog() { if (!S.plan) {
     notice('Choose or create a saved plan first.', true);
     view('plan');
     return;
-} const output = field('Staging output directory', '', 'text', 'New directory on your staging drive; separate from source roots. Reuse this exact directory to resume this plan.'), accept = checkbox('I reviewed and accept this scan’s recorded exclusions', false); dialog('Build archive set', [el('p', `Plan: ${S.plan}`), output.label, accept.label, el('p', 'Completed archives are decoded and checked before being committed. Original files and staging artifacts are retained.', 'muted')], 'Review build', () => reviewAndRun('build', { plan_id: S.plan, output: output.input.value, accept_exclusions: accept.input.checked })); }
+} const planId = S.plan, output = field('Staging output directory', '', 'text', 'New directory on your staging drive; separate from source roots. Reuse this exact directory to resume this plan.'), accept = checkbox('I reviewed and accept this scan’s recorded exclusions', false); dialog('Build archive set', [el('p', `Plan: ${planId}`), output.label, accept.label, el('p', 'Completed archives are decoded and checked before being committed. Original files and staging artifacts are retained.', 'muted')], 'Review build', () => reviewAndRun('build', { plan_id: planId, output: output.input.value, accept_exclusions: accept.input.checked })); }
 $('open-build').onclick = buildDialog;
 $('build-plan').onclick = buildDialog;
 function renderBuilds() { const rows = clear($('build-rows')); for (const b of S.builds) {
@@ -313,7 +428,9 @@ function renderReplicas() {
 $('build-load-more').onclick = safe(async () => { await loadList('builds', true); renderBuilds(); });
 $('replica-load-more').onclick = safe(async () => { await loadList('replicas', true); renderReplicas(); });
 async function archiveView() {
+    const ticket = beginRead('archive');
     const [, , history] = await Promise.all([loadList('builds'), loadList('replicas'), read('history', { limit: 20 })]);
+    if (!currentRead('archive', ticket)) return;
     renderBuilds(); renderReplicas();
     const dests = clear($('destination-list')); if (!S.destinations.length)
     dests.append(el('p', 'No destinations registered. Register a disk directory first.', 'empty')); for (const d of S.destinations)
@@ -324,7 +441,7 @@ $('new-destination').onclick = destDialog;
 function copyDialog(bundle) { if (!S.destinations.length) {
     destDialog();
     return;
-} const dest = select('Destination', S.destinations.map(d => [d.id, `${d.label} · ${d.path}${d.enabled ? '' : ' (unbound)'}`]), S.destinations[0].id), source = field('Archive-set directory', bundle); dialog('Copy verified artifacts', [source.label, dest.label, el('p', 'A fresh readback follows copying. Tape finalization and independent offline verification are separate responsibilities.', 'muted')], 'Review copy', () => reviewAndRun('copy', { bundle: source.input.value, destination: dest.input.value })); }
+} const dest = select('Destination', S.destinations.map(d => [d.id, `${d.label} · ${d.path}${d.enabled ? '' : ' (unbound)'}`]), S.destinations[0].id), source = field('Archive-set directory', bundle), packages = field('Package IDs (optional)', '', 'text', 'Comma or space separated. Include the complete per-medium selection from Check fit on media; empty selects the full archive set.'); dialog('Copy verified artifacts', [source.label, dest.label, packages.label, el('p', 'Leave package IDs empty to copy the full archive set. For a planned medium, paste its complete selection, including directory metadata. A fresh readback follows copying; tape finalization and independent offline verification remain separate.', 'muted')], 'Review copy', () => { const ids = packages.input.value.trim().split(/[\s,]+/).filter(Boolean); if (ids.some(id => !/^P\d{6,}$/.test(id))) throw new Error('Package IDs must look like P000001, separated by commas or spaces.'); const args = { bundle: source.input.value, destination: dest.input.value }; if (ids.length) args.packages = Array.from(new Set(ids)); return reviewAndRun('copy', args); }); }
 function showRecovery(r) { const out = clear($('recovery-result')); out.append(el('h2', r.state), el('p', `${r.packages} packages · ${r.members} members · ${size(r.logical_bytes)}`)); if (r.output)
     out.append(el('p', r.output, 'path')); notice(r.state); }
 function clearRecoverySelection() {
@@ -333,12 +450,17 @@ function clearRecoverySelection() {
     $('clear-recovery-selection').hidden = true;
 }
 function resetRecoverySearch() {
+    beginRead('recovery');
     clearRecoverySelection(); S.recoverySearch = null; S.recoveryOffset = 0;
     $('use-recovery-matches').disabled = true;
     for (const id of ['recovery-search-summary', 'recovery-matches', 'recovery-pages', 'recovery-result']) clear($(id));
 }
 function setRecoverySource(path) { $('recover-source').value = path; resetRecoverySearch(); }
 $('recover-source').addEventListener('input', resetRecoverySearch);
+$('recover-query').addEventListener('input', () => {
+    beginRead('recovery'); S.recoverySearch = null; $('use-recovery-matches').disabled = true;
+    for (const id of ['recovery-search-summary', 'recovery-matches', 'recovery-pages']) clear($(id));
+});
 $('clear-recovery-selection').onclick = clearRecoverySelection;
 function recoveryMetadataText(result) {
     if (result.metadata_completeness === 'complete') return 'Required directory metadata is available.';
@@ -346,13 +468,14 @@ function recoveryMetadataText(result) {
     return 'Original directory metadata completeness is unknown for this archive set. Full directory recovery is not established by this search.';
 }
 async function findRecovery(offset = 0) {
+    const ticket = beginRead('recovery');
     const bundle = $('recover-source').value, query = $('recover-query').value.trim();
     if (!bundle) throw new Error('Enter the archive-set directory first.');
     if (!query) throw new Error('Enter a path or filename to find.');
     notice('Searching recorded member manifests…');
     const r = await read('recovery_find', { bundle, query, offset, limit: PAGE_SIZE });
-    if ($('recover-source').value !== bundle || $('recover-query').value.trim() !== query) return;
-    S.recoverySearch = { bundle, query, ...r }; S.recoveryOffset = offset;
+    if ($('recover-source').value !== bundle || $('recover-query').value.trim() !== query || !currentRead('recovery', ticket)) return;
+    S.recoverySearch = Object.assign({ bundle, query }, r); S.recoveryOffset = offset;
     const rows = clear($('recovery-matches'));
     for (const m of r.rows) { const row = el('tr'); row.append(el('td', m.path, 'path'), el('td', m.package_id), el('td', size(m.size))); rows.append(row); }
     $('recovery-search-summary').textContent = `${r.total.toLocaleString()} matching entries. ${r.package_ids.length} available packages in this lookup. ${recoveryMetadataText(r)} Payload contents have not been verified by this search.`;
@@ -373,13 +496,13 @@ $('use-recovery-matches').onclick = safe(() => {
 function recoveryArgs() {
     const bundle = $('recover-source').value;
     if (S.recoveryPackages && S.recoveryPackages.bundle !== bundle) throw new Error('Archive set changed. Choose packages again or select all packages.');
-    return { bundle, ...(S.recoveryPackages ? { packages: S.recoveryPackages.ids } : {}) };
+    return Object.assign({ bundle }, S.recoveryPackages ? { packages: S.recoveryPackages.ids } : {});
 }
 $('verify-set').onclick = safe(() => work('verify', recoveryArgs(), showRecovery));
-$('restore-set').onclick = safe(() => reviewAndRun('restore', { ...recoveryArgs(), output: $('recover-output').value, permissions: $('restore-mode').checked }));
+$('restore-set').onclick = safe(() => reviewAndRun('restore', Object.assign({}, recoveryArgs(), { output: $('recover-output').value, permissions: $('restore-mode').checked })));
 $('source-bind').onclick = safe(async () => { const sources = await read('sources'); if (!sources.length)
     throw new Error('No sources recorded.'); const source = select('Source', sources.map(s => [s.id, `${s.label} · ${s.root}`]), sources[0].id), root = field('Current root directory'); dialog('Bind source location', [source.label, root.label, el('p', 'Binding records the intended location; it is not a content verification. Builds recheck each recorded file.', 'muted')], 'Bind', async () => { const args = { source_id: source.input.value, root: root.input.value }; closeDialog(); await work('bind', args); }); });
-async function fileAction(action) { $('file-menu').open = false; const base = S.status?.workspace || '.'; if (action === 'help') {
+async function fileAction(action) { $('file-menu').open = false; const base = (S.status && S.status.workspace) || '.'; if (action === 'help') {
     dialog('Recovery without this application', [el('p', 'Keep every package with its receipt and members.jsonl.gz manifest, plus the root ARCHIVE.json and RESTORE.py.'), el('pre', 'python RESTORE.py /path/to/archive-set\npython RESTORE.py /path/to/archive-set --to /path/to/new-folder'), el('p', 'Use the Python version specified in the archive recovery instructions; Zstandard packages also require zstd. This preserves ordinary file contents and paths, not complete NTFS or POSIX filesystem semantics.', 'muted')], '', null);
     return;
 } if (action === 'doctor') {
@@ -387,7 +510,7 @@ async function fileAction(action) { $('file-menu').open = false; const base = S.
     const body = el('div');
     for (const check of r.checks || []) {
         const item = el('section', undefined, 'diagnostic');
-        item.append(el('h3', `${check.label} · ${check.state.replaceAll('_', ' ')}`), el('p', check.detail));
+        item.append(el('h3', `${check.label} · ${check.state.replace(/_/g, ' ')}`), el('p', check.detail));
         if (check.action) item.append(el('p', check.action, 'muted'));
         body.append(item);
     }
@@ -422,17 +545,18 @@ async function fileAction(action) { $('file-menu').open = false; const base = S.
 document.querySelectorAll('[data-file]').forEach(b => b.onclick = safe(() => fileAction(b.dataset.file)));
 function renderEnvironment() {
     const r = S.doctor;
-    $('environment-summary').textContent = r ? `PAX TAR and gzip ready. ${r.zstd?.path ? 'Zstandard executable found.' : 'Zstandard is optional; install it or choose TAR/gzip.'} ${r.platform.startsWith('Windows') ? 'Check Everything before indexed scanning.' : 'Filesystem acquisition available.'}` : 'Check tools before choosing an optional encoder or scanner.';
+    $('environment-summary').textContent = r ? `PAX TAR and gzip ready. ${r.zstd && r.zstd.path ? 'Zstandard executable found.' : 'Zstandard is optional; install it or choose TAR/gzip.'} ${r.platform.startsWith('Windows') ? 'Check Everything before indexed scanning.' : 'Filesystem acquisition available.'}` : 'Check tools before choosing an optional encoder or scanner.';
 }
 $('check-tools').onclick = safe(() => fileAction('doctor'));
 async function activateWorkspace(path) {
     await request('/api/workspace', { path });
+    workspaceVersion++;
     S.scan = S.scanRecord = S.node = S.parent = null; S.treeOffset = 0;
     selectPlan(null); resetRecoverySearch();
     for (const id of ['scan-list', 'tree-rows', 'tree-pages', 'tree-path', 'scan-summary', 'type-list', 'issue-list', 'build-rows', 'replica-rows']) clear($(id));
     await refresh();
-    S.scan = S.scans[0]?.id || null; if (S.scan) await tree();
-    selectPlan(S.plans[0]?.id || null); if (S.plan) await packages();
+    S.scan = (S.scans[0] && S.scans[0].id) || null; if (S.scan) await tree();
+    selectPlan((S.plans[0] && S.plans[0].id) || null); if (S.plan) await packages();
     renderScans(); renderPlanSelector();
 }
 function progressText(t) {
@@ -453,9 +577,23 @@ else if (S.active)
 else {
     bar.max = 1;
     bar.value = t.state === 'COMPLETE' ? 1 : 0;
-} $('task-path').textContent = t.error?.message || p.path || 'No source reads or writes in progress.'; $('task-path').title = p.path || ''; $('cancel-task').disabled = !S.active || p.cancel_requested; }
-$('cancel-task').onclick = safe(async () => { if (S.active)
-    await request('/api/cancel', { id: S.active }); });
+} const overall = p.overall, totalBar = $('task-overall-progress');
+    if (overall) {
+        $('task-overall').textContent = `Overall: ${overall.done.toLocaleString()}${overall.total !== null ? ' of ' + overall.total.toLocaleString() : ''} ${overall.unit}${overall.total === null ? ' · total not yet measured' : ''}. Active step shown below.`;
+        totalBar.hidden = overall.total === null || overall.total <= 0;
+        if (!totalBar.hidden) { totalBar.max = overall.total; totalBar.value = Math.min(overall.done, overall.total); }
+    } else { totalBar.hidden = true; $('task-overall').textContent = S.active ? 'Overall total not yet measured. Progress below is the active step only.' : `${t.action || 'Operation'}: ${t.state.toLowerCase()}.`; }
+    $('task-package').textContent = p.package ? `Package ${p.package.index !== null && p.package.index !== undefined ? p.package.index + (p.package.total !== null && p.package.total !== undefined ? ' of ' + p.package.total : '') + ' · ' : ''}${p.package.id}` : '';
+    $('task-path').textContent = (t.error && t.error.message) || p.path || 'No source reads or writes in progress.'; $('task-path').title = p.path || ''; $('cancel-task').disabled = !S.active || p.cancel_requested; }
+$('cancel-task').onclick = safe(async () => {
+    if (!S.active) return;
+    const id = S.active; $('cancel-task').disabled = true;
+    try {
+        const result = await request('/api/cancel', { id });
+        notice(result.cancel_requested ? 'Cancellation requested. The worker will stop at its next safe check; completed packages are retained.' : `Operation already ${String(result.state || 'finished').toLowerCase()}.`);
+        schedulePolling(0);
+    } catch (error) { $('cancel-task').disabled = false; throw error; }
+});
 $('show-activity').onclick = safe(async () => { const tasks = await request('/api/tasks'), body = el('div'); for (const t of tasks.slice().reverse()) {
     body.append(el('h2', `${t.action} · ${t.state}`));
     for (const e of t.progress.events.slice(-8))
@@ -474,18 +612,32 @@ async function polling() {
     try {
         const rows = await request('/api/tasks'); S.tasks = rows;
         if ($('connection-state').textContent !== 'Connected') $('connection-state').textContent = 'Connected';
+        $('connection-state').title = '';
         const active = rows.find(t => t.state === 'RUNNING') || rows.find(t => t.state === 'QUEUED');
-        if (active) renderProgress(active); else if (rows.length) renderProgress(rows.at(-1));
+        if (active) renderProgress(active); else if (rows.length) renderProgress(rows[rows.length - 1]);
+        else S.active = null;
         for (const [id, waiter] of waitingTasks) {
             const task = rows.find(t => t.id === id);
-            if (!task || !['COMPLETE', 'FAILED', 'CANCELLED'].includes(task.state)) continue;
+            if (!task) {
+                waiter.absent = (waiter.absent || 0) + 1;
+                if (waiter.absent >= 3) { waitingTasks.delete(id); waiter.reject(new Error('Task ' + id + ' is no longer in this service session. Review Activity and operation history before retrying. No operation was resubmitted.')); }
+                continue;
+            }
+            waiter.absent = 0;
+            if (!['COMPLETE', 'FAILED', 'CANCELLED'].includes(task.state)) continue;
             const detail = await request('/api/task/' + id);
             waitingTasks.delete(id);
             if (detail.state === 'COMPLETE') waiter.resolve(detail);
-            else waiter.reject(new Error(`${detail.error?.code || detail.state}: ${detail.error?.message || 'Operation cancelled'}`));
+            else waiter.reject(new Error(`${(detail.error && detail.error.code) || detail.state}: ${(detail.error && detail.error.message) || 'Operation cancelled'}`));
         }
     } catch (error) {
-        if ($('connection-state').textContent !== 'Disconnected · reconnecting') $('connection-state').textContent = 'Disconnected · reconnecting';
+        if (error.code === 'TOKEN' || error.code === 'HOST' || error.code === 'ORIGIN') {
+            serviceStopped = true;
+            $('connection-state').textContent = 'Session changed · reload this page';
+            for (const [id, waiter] of waitingTasks) waiter.reject(new Error('The local session changed. Reload this page and review operation history before retrying task ' + id + '.'));
+            waitingTasks.clear();
+            notice('This page no longer matches the local service session. Reload to reconnect. Operations were not resubmitted.', true);
+        } else if ($('connection-state').textContent !== 'Disconnected · reconnecting') $('connection-state').textContent = 'Disconnected · reconnecting';
         $('connection-state').title = error.message;
     } finally {
         pollingBusy = false;
@@ -495,10 +647,15 @@ async function polling() {
 async function start() {
     const [doctor] = await Promise.all([read('doctor'), refresh()]); S.doctor = doctor; renderEnvironment();
     const pref = S.status.preferences; appearance(pref.appearance || 'system');
-    S.scan = pref.selected_snapshot || S.scans[0]?.id || null;
-    selectPlan(pref.selected_plan || S.plans[0]?.id || null); view(pref.view || 'sources');
+    S.scan = pref.selected_snapshot || (S.scans[0] && S.scans[0].id) || null;
+    selectPlan(pref.selected_plan || (S.plans[0] && S.plans[0].id) || null); view(pref.view || 'sources');
     if (S.scan) await tree(); if (S.plan) await packages();
     renderScans(); renderPlanSelector(); if (S.view === 'archive') await archiveView();
+    if (typeof window !== 'undefined' && window.ArchivistBootstrap) window.ArchivistBootstrap.ready();
     schedulePolling(0);
 }
-start().catch(e => notice(e.message, true));
+if (typeof window !== 'undefined' && window.ArchivistBootstrap) window.ArchivistBootstrap.loaded();
+start().catch(e => {
+    notice(e.message, true);
+    if (typeof window !== 'undefined' && window.ArchivistBootstrap) window.ArchivistBootstrap.fail('The local interface could not finish opening: ' + e.message + '. Keep the service running and reload this page. Existing archives remain usable through their offline recovery files.');
+});

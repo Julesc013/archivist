@@ -10,7 +10,7 @@ from unittest import mock
 
 from test_core import Fixture, ROOT
 from archivist.application import Application
-from archivist import recovery
+from archivist import __version__, recovery
 from archivist.store import config_directory, default_workspace
 from archivist.util import hash_file
 
@@ -147,7 +147,7 @@ class ApplicationV2Tests(Fixture):
             text=True,
             timeout=20,
         )
-        self.assertEqual(result.stdout.strip(), "2.0.0-alpha.1")
+        self.assertEqual(result.stdout.strip(), __version__)
 
     def legacy_catalogue(self, bundle):
         """Produce a consistent older catalogue with no dependency declaration."""

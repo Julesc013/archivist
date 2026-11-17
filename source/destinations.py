@@ -295,7 +295,11 @@ def copy_recipe(store, bundle, destination, packages, progress):
             require(
                 name not in files, "COPY_DUPLICATE", "Two packages refer to the same stored object"
             )
-            files[name] = {"sha256": sha, "size": root.joinpath(*name.split("/")).stat().st_size}
+            files[name] = {
+                "sha256": sha,
+                "size": root.joinpath(*name.split("/")).stat().st_size,
+                "package_id": r["package_id"],
+            }
             require(
                 dest["max_file"] is None or files[name]["size"] <= dest["max_file"],
                 "DEST_FILE_LIMIT",
@@ -386,6 +390,7 @@ def copy_recipe(store, bundle, destination, packages, progress):
         **capacity.metadata_plan_selection(
             [reference["package_id"] for reference in refs],
             index.get("directory_metadata_dependencies"),
+            known_metadata_ids=index.get("directory_metadata_packages", ()),
         ),
     }
     return review, root, index, refs, files, final, partial, kit
@@ -398,15 +403,20 @@ def preflight_copy(store, bundle, destination, progress, packages=None):
 def copy_file(source, target, expected, progress):
     target.parent.mkdir(parents=True, exist_ok=True)
     no_links(target.parent)
+    no_links(target, missing_ok=True)
     if target.exists():
+        progress.phase("Check copied object", expected["size"], "bytes")
         require(
-            target.stat().st_size == expected["size"] and hash_file(target) == expected["sha256"],
+            target.is_file()
+            and target.stat().st_size == expected["size"]
+            and hash_file(target, progress) == expected["sha256"],
             "COPY_CONFLICT",
             "Existing file differs; refusing overwrite",
             path=str(target),
         )
-        progress.advance(expected["size"], str(target))
+        progress.check()
         return
+    progress.phase("Copy archive object", expected["size"], "bytes")
     partial = target.with_name("." + target.name + ".partial-" + uuid.uuid4().hex[:8])
     h = hashlib.sha256()
     before = source.stat()
@@ -429,6 +439,7 @@ def copy_file(source, target, expected, progress):
         "COPY_HASH",
         "Read bytes differ from the package receipt",
     )
+    progress.check()
     require(not target.exists(), "COPY_CONFLICT", "Output appeared during copy; refusing overwrite")
     recovery.publish_new(partial, target)
     fsync_dir(target.parent)
@@ -619,7 +630,16 @@ def copy(store, bundle, destination, progress, approval, packages=None):
                 },
             )
         progress.phase("Copy archives", sum(f["size"] for f in files.values()), "bytes")
+        progress.set_overall(0, len(refs), "copied packages")
+        positions = {ref["package_id"]: position for position, ref in enumerate(refs, 1)}
+        active_package = None
         for name, expected in files.items():
+            ident = expected["package_id"]
+            if ident != active_package:
+                if active_package is not None:
+                    progress.set_overall(positions[active_package], len(refs), "copied packages")
+                active_package = ident
+                progress.set_package(ident, positions[ident], len(refs))
             check_destination(store, destination)
             copy_file(
                 no_links(root.joinpath(*name.split("/"))),
@@ -627,6 +647,8 @@ def copy(store, bundle, destination, progress, approval, packages=None):
                 expected,
                 progress,
             )
+        progress.set_overall(len(refs), len(refs), "copied packages")
+        progress.set_package(None)
         new_index = {
             **index,
             "packages": refs,
@@ -664,7 +686,9 @@ def copy(store, bundle, destination, progress, approval, packages=None):
             os.fsync(out.fileno())
         check_copy_metadata(partial, dest, review)
         progress.event("INFO", "READBACK_BEGIN", destination=destination)
+        progress.set_overall(0, None, "verified packages")
         result = recovery.run(partial, progress=recovery_progress(progress))
+        progress.set_overall(len(refs), len(refs), "verified packages")
         check_destination(store, destination)
         receipt = {
             "format": "AP20Replica/1",
@@ -691,6 +715,7 @@ def copy(store, bundle, destination, progress, approval, packages=None):
         atomic_json(marker, completion)
         check_copy_metadata(partial, dest, review)
         fsync_dir(partial)
+        progress.check()
         require(not final.exists(), "REPLICA_CONFLICT", "Final replica already exists")
         recovery.publish_new(partial, final)
         fsync_dir(final.parent)

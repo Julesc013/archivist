@@ -11,6 +11,7 @@ import stat
 import subprocess
 import tarfile
 import tempfile
+import threading
 import uuid
 from decimal import Decimal
 from pathlib import Path
@@ -51,9 +52,11 @@ class CountWriter:
 
 
 @contextlib.contextmanager
-def encoded_writer(path, codec, level):
+def encoded_writer(path, codec, level, progress=None):
     require(codec in EXTENSIONS, "CODEC", "Unsupported encoder")
     proc = None
+    stop_monitor = threading.Event()
+    monitor = None
     with path.open("xb") as raw, tempfile.TemporaryFile() as errors:
         stream = raw
         try:
@@ -76,8 +79,26 @@ def encoded_writer(path, codec, level):
                     shell=False,
                 )
                 stream = proc.stdin
+                if progress is not None:
+                    # GUI cancellation cannot interrupt a worker blocked while
+                    # a stalled encoder holds a full stdin pipe. Killing this
+                    # owned child releases that write; finally always reaps it.
+                    def watch_cancellation():
+                        while not stop_monitor.wait(0.1):
+                            if progress.cancelled.is_set():
+                                try:
+                                    if proc.poll() is None:
+                                        proc.kill()
+                                except OSError:
+                                    pass
+                                return
+
+                    monitor = threading.Thread(target=watch_cancellation, daemon=True)
+                    monitor.start()
             counter = CountWriter(stream)
             yield counter
+            if progress is not None:
+                progress.check()
             if stream is not raw:
                 stream.close()
             if proc:
@@ -91,7 +112,14 @@ def encoded_writer(path, codec, level):
                 )
             raw.flush()
             os.fsync(raw.fileno())
+        except BaseException:
+            if progress is not None:
+                progress.check()
+            raise
         finally:
+            stop_monitor.set()
+            if monitor is not None:
+                monitor.join(timeout=1)
             if proc and proc.poll() is None:
                 proc.kill()
                 proc.wait()
@@ -259,7 +287,7 @@ def preflight_build(store, plan_id, output, progress, packages=None, accept_excl
         require(
             marker.is_file(),
             "OUTPUT_EXISTS",
-            "Existing output is not an owned V20 build; choose a new directory",
+            "Existing output is not an owned compatible build; choose a new directory",
         )
         state = json_read(marker)
         require(
@@ -341,10 +369,13 @@ def build_package(
     member_count = logical_bytes = 0
     progress.phase("Build " + package["id"], package["logical_bytes"], "bytes")
     with manifest.open("xb") as raw_manifest:
-        with (
-            gzip.GzipFile(filename="", fileobj=raw_manifest, mode="wb", mtime=0) as rows,
-            encoded_writer(artifact, package["codec"], package["level"]) as encoded,
-        ):
+        with contextlib.ExitStack() as stack:
+            rows = stack.enter_context(
+                gzip.GzipFile(filename="", fileobj=raw_manifest, mode="wb", mtime=0)
+            )
+            encoded = stack.enter_context(
+                encoded_writer(artifact, package["codec"], package["level"], progress)
+            )
             with tarfile.open(
                 fileobj=encoded, mode="w|", format=tarfile.PAX_FORMAT, bufsize=CHUNK
             ) as tar:
@@ -506,18 +537,7 @@ def build_package(
 
 
 def recovery_progress(progress):
-    phase = [None]
-
-    def update(name, done, total, path):
-        progress.check()
-        if phase[0] != name or (done < progress.done):
-            progress.phase(
-                name, total, "bytes" if total is not None and name != "Check paths" else "items"
-            )
-            phase[0] = name
-        progress.update(done, path)
-
-    return update
+    return progress.recovery_callback()
 
 
 def build(store, plan_id, output, progress, approval, packages=None, accept_exclusions=False):
@@ -579,8 +599,10 @@ def build(store, plan_id, output, progress, approval, packages=None, accept_excl
     previous = json_read(output / "ARCHIVE.json") if (output / "ARCHIVE.json").is_file() else None
     refs = {r["package_id"]: r for r in previous.get("packages", [])} if previous else {}
     try:
-        for pid in review["packages"]:
+        progress.set_overall(0, len(review["packages"]), "built and verified packages")
+        for position, pid in enumerate(review["packages"], 1):
             progress.check()
+            progress.set_package(pid, position, len(review["packages"]))
             p = store.one("SELECT * FROM packages WHERE plan_id=? AND id=?", (plan_id, pid))
             src = sources[p["snapshot_id"]]
             rel = "packages/" + src["namespace"]
@@ -629,8 +651,15 @@ def build(store, plan_id, output, progress, approval, packages=None, accept_excl
                     json.loads(src["identity"]).get("rebound", False),
                 )
             # Each committed package is catalogued. A partial plan is clearly labelled.
-            publish_bundle(output, store, plan, sources, list(refs.values()), build_id)
+            publish_bundle(
+                output, store, plan, sources, list(refs.values()), build_id, progress=progress
+            )
+            progress.set_overall(position, len(review["packages"]), "built and verified packages")
         recovery.validate_kit(output, progress=recovery_progress(progress))
+        # Observer notifications can fail or request cancellation. Emit before
+        # the durable completion fence, never convert a committed build later.
+        progress.set_package(None)
+        progress.check()
         state["state"] = (
             "COMPLETE" if len(refs) == json.loads(plan["counts"])["packages"] else "PARTIAL_PLAN"
         )
@@ -667,20 +696,12 @@ def build(store, plan_id, output, progress, approval, packages=None, accept_excl
         raise
 
 
-def publish_bundle(output, store, plan, sources, refs, build_id):
+def publish_bundle(output, store, plan, sources, refs, build_id, progress=None):
     expected = json.loads(plan["counts"])["packages"]
     all_packages = store.rows(
         "SELECT id,snapshot_id,kind FROM packages WHERE plan_id=? ORDER BY id", (plan["id"],)
     )
-    metadata = {}
-    for package in all_packages:
-        if package["kind"] == "directories":
-            metadata.setdefault(package["snapshot_id"], []).append(package["id"])
-    dependencies = {
-        package["id"]: metadata.get(package["snapshot_id"], [])
-        for package in all_packages
-        if package["kind"] == "data"
-    }
+    dependencies, metadata_ids = capacity.package_metadata_dependencies(all_packages)
     index = {
         "format": "AP20Archive/1",
         "producer": __version__,
@@ -696,6 +717,7 @@ def publish_bundle(output, store, plan, sources, refs, build_id):
         "human_manifest": "ARCHIVE.html",
         "consistency": "Per-file checked live reads; not a filesystem snapshot",
         "directory_metadata_dependencies": dependencies,
+        "directory_metadata_packages": metadata_ids,
         "sources": [
             {
                 "source_id": r["id"],
@@ -710,12 +732,14 @@ def publish_bundle(output, store, plan, sources, refs, build_id):
         "excluded_observations": json.loads(plan["counts"])["excluded_observations"],
     }
     readme = (
-        "ARCHIVE PLANNER — PORTABLE ARCHIVE SET\n\n"
+        "ARCHIVIST — PORTABLE ARCHIVE SET\n\n"
         "1. Keep ARCHIVE.json, package receipts, manifests and payloads together.\n"
         "2. Verify: python RESTORE.py .\n"
         "3. Restore to a NEW directory: python RESTORE.py . --to /path/to/new-folder\n"
         "   Use --permissions to restore ordinary permission bits where supported.\n"
-        "4. Python 3.12+ is required. .tar.zst requires the zstd command.\n"
+        "4. Current Archivist readers support Python 3.8+. A resumed legacy set\n"
+        "   may retain an older RESTORE.py with its original Python requirement.\n"
+        "   .tar.zst requires the zstd command.\n"
         "5. Without this script: decode zstd/gzip if necessary, then extract PAX TAR\n"
         "   into one destination; members are source-namespaced relative paths.\n"
         "   Directory-metadata packages follow payloads to restore directory times.\n\n"
@@ -729,4 +753,9 @@ def publish_bundle(output, store, plan, sources, refs, build_id):
         "Immediate readback is not proof of offline tape readability. Finalize,\n"
         "unmount/reload and verify through a qualified LTFS implementation.\n"
     )
-    kit_publication.publish(output, index, readme.encode("utf-8"))
+    kit_publication.publish(
+        output,
+        index,
+        readme.encode("utf-8"),
+        progress=recovery_progress(progress) if progress is not None else None,
+    )

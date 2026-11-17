@@ -3,7 +3,9 @@
 
 import argparse
 import json
+import os
 import platform
+import sqlite3
 import shutil
 import sys
 import time
@@ -13,6 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from archivist import __version__
 
 
 class Result(unittest.TextTestResult):
@@ -55,6 +58,9 @@ def main():
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "platform": platform.platform(),
         "python": sys.version,
+        "sqlite": sqlite3.sqlite_version,
+        "product_version": __version__,
+        "source_commit": os.environ.get("GITHUB_SHA"),
         "runtime": {"zstd": shutil.which("zstd"), "tar": shutil.which("tar")},
         "run": result.testsRun,
         "passed": result.testsRun - len(result.failures) - len(result.errors) - len(result.skipped),

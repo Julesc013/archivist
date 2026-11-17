@@ -57,7 +57,9 @@
 }
 body {
   margin:0;
+  background:#f5f6f8;
   background:var(--bg);
+  color:#1e2732;
   color:var(--ink);
   line-height:1.45
 }
@@ -67,8 +69,11 @@ button,input,select {
 }
 button,select,input:not([type=checkbox]) {
   min-height:32px;
+  border:1px solid #d3d9e0;
   border:1px solid var(--rule);
+  border-radius:5px;
   border-radius:var(--radius);
+  background:#fff;
   background:var(--surface);
   padding:5px 10px
 }
@@ -77,7 +82,9 @@ button {
   white-space:nowrap
 }
 button:hover:not(:disabled) {
+  background:#e4effc;
   background:var(--selection);
+  border-color:#175caa;
   border-color:var(--accent)
 }
 button:disabled {
@@ -85,23 +92,30 @@ button:disabled {
   cursor:default
 }
 .primary {
+  background:#175caa;
   background:var(--accent);
+  color:#fff;
   color:var(--accent-ink);
+  border-color:#175caa;
   border-color:var(--accent)
 }
 .primary:hover:not(:disabled) {
+  color:#1e2732;
   color:var(--ink)
 }
 input:focus-visible,select:focus-visible,button:focus-visible,summary:focus-visible,a:focus-visible,[tabindex]:focus-visible {
+  outline:2px solid #175caa;
   outline:2px solid var(--accent);
   outline-offset:2px
 }
 input[type=checkbox] {
   width:16px;
   height:16px;
+  accent-color:#175caa;
   accent-color:var(--accent)
 }
 label {
+  display:block;
   display:grid;
   gap:4px;
   font-size:13px
@@ -110,9 +124,11 @@ label.check {
   display:flex;
   align-items:center;
   gap:8px;
+  padding-top:6px; padding-bottom:6px;
   padding-block:6px
 }
 .muted,p {
+  color:#5b6572;
   color:var(--muted)
 }
 h1,h2,p {
@@ -132,7 +148,9 @@ h2 {
   gap:18px;
   min-height:50px;
   padding:8px 22px;
+  background:#fff;
   background:var(--surface);
+  border-bottom:1px solid #d3d9e0;
   border-bottom:1px solid var(--rule)
 }
 .appbar strong {
@@ -144,6 +162,7 @@ h2 {
   text-overflow:ellipsis;
   white-space:nowrap;
   font-size:12px;
+  color:#5b6572;
   color:var(--muted)
 }
 .appearance {
@@ -155,7 +174,9 @@ h2 {
   display:flex;
   gap:5px;
   padding:8px 22px;
+  background:#fff;
   background:var(--surface);
+  border-bottom:1px solid #d3d9e0;
   border-bottom:1px solid var(--rule);
   position:sticky;
   top:0;
@@ -166,8 +187,11 @@ h2 {
   background:transparent
 }
 .workflow button[aria-current=page] {
+  background:#e4effc;
   background:var(--selection);
+  border-color:#d3d9e0;
   border-color:var(--rule);
+  color:#175caa;
   color:var(--accent);
   font-weight:650
 }
@@ -189,7 +213,9 @@ h2 {
   border-radius:4px
 }
 .menu[open]>summary {
+  border-color:#d3d9e0;
   border-color:var(--rule);
+  background:#e4effc;
   background:var(--selection)
 }
 .menu>div {
@@ -197,9 +223,12 @@ h2 {
   top:34px;
   left:0;
   z-index:25;
+  background:#fff;
   background:var(--surface);
+  border:1px solid #d3d9e0;
   border:1px solid var(--rule);
   padding:5px;
+  box-shadow:0 5px 20px rgba(0,0,0,.2);
   box-shadow:0 5px 20px #0003;
   min-width:250px
 }
@@ -248,6 +277,7 @@ main {
   margin:0
 }
 .workpair {
+  display:block;
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(320px,.7fr);
   gap:14px;
@@ -257,8 +287,11 @@ main {
   grid-template-columns:290px minmax(0,1fr)
 }
 .panel {
+  background:#fff;
   background:var(--surface);
+  border:1px solid #d3d9e0;
   border:1px solid var(--rule);
+  border-radius:5px;
   border-radius:var(--radius);
   padding:14px;
   min-width:0
@@ -270,6 +303,7 @@ main {
   margin-bottom:10px
 }
 .view-archive>.panel {
+  margin-top:14px; margin-bottom:14px;
   margin-block:14px
 }
 .panel+ .panel {
@@ -282,6 +316,7 @@ main {
   max-width:850px
 }
 .narrow>label {
+  margin-top:14px; margin-bottom:14px;
   margin-block:14px
 }
 .summary {
@@ -292,19 +327,23 @@ main {
   margin:10px 0 14px
 }
 .summary>span {
+  border:1px solid #d3d9e0;
   border:1px solid var(--rule);
   padding:4px 9px;
   border-radius:3px;
+  background:#fff;
   background:var(--surface);
   font-size:12px
 }
 .path {
+  overflow-wrap:break-word;
   overflow-wrap:anywhere;
   min-width:0;
   font-family:ui-monospace,Consolas,monospace;
   font-size:12px
 }
 .object-list {
+  display:block;
   display:grid;
   gap:6px;
   margin:8px 0 14px;
@@ -314,21 +353,26 @@ main {
 .object-list>button {
   white-space:normal;
   text-align:left;
+  display:block;
   display:grid;
   gap:3px;
   padding:9px 10px
 }
 .object-list>button.selected {
+  border-color:#175caa;
   border-color:var(--accent);
+  background:#e4effc;
   background:var(--selection)
 }
 .object-list small {
+  color:#5b6572;
   color:var(--muted);
   font-size:11px
 }
 .table-scroll {
   overflow:auto;
   max-height:60vh;
+  border:1px solid #d3d9e0;
   border:1px solid var(--rule);
   border-radius:3px
 }
@@ -340,13 +384,16 @@ table {
 th,td {
   text-align:left;
   vertical-align:top;
+  border-bottom:1px solid #d3d9e0;
   border-bottom:1px solid var(--rule);
   padding:8px 9px;
+  overflow-wrap:break-word;
   overflow-wrap:anywhere
 }
 th {
   position:sticky;
   top:0;
+  background:#fff;
   background:var(--surface);
   font-weight:600;
   white-space:nowrap;
@@ -359,9 +406,11 @@ tbody tr[data-select] {
   cursor:pointer
 }
 tbody tr[data-select]:hover {
+  background:#e4effc;
   background:var(--selection)
 }
 tr.selected {
+  background:#e4effc;
   background:var(--selection)
 }
 td .path {
@@ -369,6 +418,7 @@ td .path {
 }
 td small {
   display:block;
+  color:#5b6572;
   color:var(--muted);
   margin-top:3px
 }
@@ -382,8 +432,10 @@ td .link {
   min-height:22px;
   white-space:normal;
   text-align:left;
+  color:#175caa;
   color:var(--accent);
   max-width:100%;
+  overflow-wrap:break-word;
   overflow-wrap:anywhere
 }
 .pager {
@@ -409,19 +461,25 @@ td .link {
   white-space:nowrap
 }
 .badge.blocked,.error {
+  color:#b32932;
   color:var(--danger)
 }
 .badge.review,.warning {
+  color:#80570d;
   color:var(--warning)
 }
 .badge.ready,.good {
+  color:#166344;
   color:var(--good)
 }
 .environment {
+  border:1px solid #d3d9e0;
   border:1px solid var(--rule);
+  border-radius:5px;
   border-radius:var(--radius);
   padding:10px 14px;
   margin-bottom:14px;
+  background:#fff;
   background:var(--surface)
 }
 .revision-note {
@@ -431,10 +489,12 @@ td .link {
   gap:6px 12px;
   margin:8px 0;
   font-size:12px;
+  overflow-wrap:break-word;
   overflow-wrap:anywhere
 }
 .diagnostic {
   padding:8px 0;
+  border-bottom:1px solid #d3d9e0;
   border-bottom:1px solid var(--rule)
 }
 .diagnostic h3 {
@@ -449,9 +509,12 @@ td .link {
   white-space:nowrap
 }
 details:not(.menu) {
+  border:1px solid #d3d9e0;
   border:1px solid var(--rule);
+  border-radius:5px;
   border-radius:var(--radius);
   margin-top:14px;
+  background:#fff;
   background:var(--surface);
   padding:10px 14px
 }
@@ -466,12 +529,17 @@ details[open]>summary {
 #notice {
   margin:10px 24px 0;
   padding:9px 14px;
+  border:1px solid #d3d9e0;
   border:1px solid var(--rule);
+  border-left:3px solid #175caa;
   border-left:3px solid var(--accent);
+  background:#fff;
   background:var(--surface);
+  overflow-wrap:break-word;
   overflow-wrap:anywhere
 }
 #notice.error {
+  border-left-color:#b32932;
   border-left-color:var(--danger)
 }
 .activity {
@@ -480,7 +548,9 @@ details[open]>summary {
   left:0;
   right:0;
   z-index:10;
+  background:#fff;
   background:var(--surface);
+  border-top:1px solid #d3d9e0;
   border-top:1px solid var(--rule);
   padding:8px 22px;
   font-size:12px
@@ -498,6 +568,7 @@ details[open]>summary {
   width:100%;
   height:5px;
   margin:6px 0;
+  accent-color:#175caa;
   accent-color:var(--accent)
 }
 .activity .path {
@@ -509,23 +580,31 @@ details[open]>summary {
   font-size:12px
 }
 dialog {
+  width:94vw;
+  max-width:680px;
   width:min(680px,94vw);
   max-height:90vh;
   overflow:auto;
+  background:#fff;
   background:var(--surface);
+  color:#1e2732;
   color:var(--ink);
+  border:1px solid #d3d9e0;
   border:1px solid var(--rule);
   border-radius:7px;
   padding:20px;
+  box-shadow:0 12px 70px rgba(0,0,0,.33);
   box-shadow:0 12px 70px #0005
 }
 dialog::backdrop {
+  background:rgba(0,0,0,.4);
   background:#0006
 }
 dialog header {
   margin-bottom:16px
 }
 dialog footer {
+  border-top:1px solid #d3d9e0;
   border-top:1px solid var(--rule);
   padding-top:14px;
   margin-top:18px
@@ -534,10 +613,12 @@ dialog h2 {
   font-size:19px
 }
 #dialog-body {
+  display:block;
   display:grid;
   gap:12px
 }
 #dialog-body .row {
+  display:block;
   display:grid;
   grid-template-columns:repeat(3,minmax(0,1fr));
   gap:10px
@@ -546,10 +627,12 @@ dialog h2 {
   margin-top:10px
 }
 .object-checks {
+  display:block;
   display:grid;
   gap:4px;
   max-height:220px;
   overflow:auto;
+  border:1px solid #d3d9e0;
   border:1px solid var(--rule);
   padding:8px
 }
@@ -558,6 +641,7 @@ dialog h2 {
 }
 pre {
   white-space:pre-wrap;
+  overflow-wrap:break-word;
   overflow-wrap:anywhere;
   font-family:ui-monospace,Consolas,monospace;
   font-size:12px;
@@ -577,24 +661,30 @@ pre {
 .fit-bar {
   height:24px;
   display:flex;
+  border:1px solid #d3d9e0;
   border:1px solid var(--rule);
   margin-top:4px;
+  background:#f5f6f8;
   background:var(--bg);
   overflow:hidden
 }
 .fit-bar span {
   height:100%;
+  border-right:1px solid #fff;
   border-right:1px solid var(--surface);
+  background:#175caa;
   background:var(--accent);
   opacity:.8;
   min-width:1px
 }
 .fit-bar span.reserve {
+  background:#5b6572;
   background:var(--muted);
   opacity:.4
 }
 .empty {
   padding:18px;
+  color:#5b6572;
   color:var(--muted);
   font-size:13px;
   text-align:center
@@ -604,6 +694,7 @@ pre {
   left:16px;
   top:-100px;
   z-index:100;
+  background:#fff;
   background:var(--surface);
   padding:8px
 }
@@ -619,6 +710,7 @@ pre {
 }
 hr {
   border:0;
+  border-top:1px solid #d3d9e0;
   border-top:1px solid var(--rule);
   margin:16px 0
 }
@@ -696,6 +788,7 @@ main {
   order:3
 }
 #notice {
+  margin-left:10px; margin-right:10px;
   margin-inline:10px
 }
 
@@ -720,15 +813,18 @@ main {
 
 
 .review-facts {
+  display:block;
   display:grid;
   grid-template-columns:10rem minmax(0,1fr);
   gap:.45rem 1rem
 }
 .review-facts dt {
+  color:#5b6572;
   color:var(--muted)
 }
 .review-facts dd {
   margin:0;
+  overflow-wrap:break-word;
   overflow-wrap:anywhere
 }
 @media(max-width:600px) {
@@ -756,6 +852,7 @@ label>input:not([type=checkbox]),label>select {
   min-width:0
 }
 .panel .toolbar h2 {
+  overflow-wrap:break-word;
   overflow-wrap:anywhere;
   min-width:0
 }
@@ -780,3 +877,50 @@ label>input:not([type=checkbox]),label>select {
 
 }
 
+
+/* Baseline layout and focus remain usable when newer CSS features are absent. */
+input:focus,select:focus,button:focus,summary:focus,a:focus,[tabindex]:focus {
+  outline:2px solid #175caa;
+  outline:2px solid var(--accent);
+  outline-offset:2px;
+}
+.compatibility {
+  max-width:760px;
+  margin:32px auto;
+  padding:24px;
+  border:1px solid #d3d9e0;
+  background:#fff;
+  color:#1e2732;
+  font-family:Arial,sans-serif;
+}
+.compatibility p,.compatibility pre { margin-top:14px; color:#1e2732; }
+.compatibility a { color:#175caa; }
+details:not([open]) > :not(summary) { display:none; }
+summary { cursor:pointer; }
+dialog:not([open]) { display:none; }
+#dialog-backdrop { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,.4); z-index:90; }
+.fallback-dialog[open] { display:block; position:fixed; top:5vh; left:50%; transform:translateX(-50%); margin:0; z-index:100; }
+body.modal-open { overflow:hidden; }
+.workpair > * + * { margin-top:14px; }
+@supports(display:grid) { .workpair > * + * { margin-top:0; } }
+.workflow { flex-wrap:wrap; }
+main { padding-bottom:190px; }
+.progress-scope { display:flex; flex-wrap:wrap; justify-content:space-between; margin-top:4px; }
+.progress-scope > span { margin-right:12px; }
+#task-overall-progress { height:7px; }
+.review-spaces { display:block; }
+.space-review { border:1px solid #d3d9e0; border:1px solid var(--rule); padding:12px; margin:10px 0; }
+.space-review h3 { font-size:14px; margin:0 0 8px; }
+.space-review p + p { margin-top:8px; }
+.medium-packages { max-height:100px; overflow:auto; }
+@media(max-width:700px) { main { padding-bottom:220px; } .compatibility { margin:12px; padding:16px; } }
+/* Flexbox gap arrived later than the baseline engines. Child margins work in both. */
+.toolbar,.appbar,.workflow,.summary,.appearance,.pager,.view-head,.fit-title,.revision-note { gap:0; }
+.toolbar > *, .summary > *, .revision-note > * { margin-right:9px; margin-bottom:5px; }
+.toolbar > :last-child,.summary > :last-child,.revision-note > :last-child { margin-right:0; }
+.appbar > * + * { margin-left:14px; }
+.workflow > * + * { margin-left:5px; }
+.appearance > * + *, .pager > * + *, .fit-title > * + * { margin-left:8px; }
+.view-head > * + * { margin-left:12px; }
+.toolbar > .end,.workflow > .end { margin-left:auto; }
+@media(max-width:700px) { .appbar > * + * { margin-left:8px; } .toolbar > .end { margin-left:0; } }

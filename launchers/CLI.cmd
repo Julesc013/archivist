@@ -2,13 +2,13 @@
 setlocal
 rem No PowerShell association, administrator rights or execution-policy change.
 set "AP_PY="
-py -3 -c "import sys;sys.exit(sys.version_info < (3,12))" >nul 2>nul
+py -3 -c "import sys;sys.exit(sys.version_info < (3,8))" >nul 2>nul
 if not errorlevel 1 set "AP_PY=py -3"
 if defined AP_PY goto run
-python -c "import sys;sys.exit(sys.version_info < (3,12))" >nul 2>nul
+python -c "import sys;sys.exit(sys.version_info < (3,8))" >nul 2>nul
 if not errorlevel 1 set "AP_PY=python"
 if defined AP_PY goto run
-echo Archivist requires Python 3.12 or newer.
+echo Archivist requires Python 3.8 or newer.
 echo Install Python, then reopen this launcher. See START-HERE.txt.
 pause
 exit /b 2

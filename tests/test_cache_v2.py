@@ -104,10 +104,9 @@ class PathCacheBehaviorTests(Fixture):
         (self.source / "Empty" / "Nested").mkdir(parents=True)
         expected = {""} | {p.relative_to(self.source).as_posix() for p in self.source.rglob("*")}
 
-        with (
-            mock.patch("archivist.store.PathCache", dict),
-            mock.patch("archivist.inventory.PathCache", dict),
-        ):
+        with ExitStack() as contexts:
+            contexts.enter_context(mock.patch("archivist.store.PathCache", dict))
+            contexts.enter_context(mock.patch("archivist.inventory.PathCache", dict))
             reference = self.scan()
             reference_plan = self.plan(reference["snapshot_id"])
 

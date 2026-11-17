@@ -15,17 +15,23 @@ from .store import remember_workspace
 from .util import Problem, canonical, now, require, uid
 
 STATIC = Path(__file__).with_name("static")
-ASSETS = {"/": "index.html", "/app.js": "app.js", "/app.css": "app.css"}
+ASSETS = {
+    "/": "index.html",
+    "/bootstrap.js": "bootstrap.js",
+    "/app.js": "app.js",
+    "/app.css": "app.css",
+}
 
 
 class Tasks:
     def __init__(self, app):
         self.app = app
         self.executor = concurrent.futures.ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="ap20-worker"
+            max_workers=1, thread_name_prefix="archivist-worker"
         )
         self.lock = threading.RLock()
         self.items = {}
+        self.closed = False
 
     def submit(self, action, args):
         require(
@@ -35,6 +41,7 @@ class Tasks:
             "Only work/review actions can be queued",
         )
         with self.lock:
+            require(not self.closed, "CLOSED", "The local service is stopping")
             require(
                 sum(x["state"] in ("QUEUED", "RUNNING") for x in self.items.values()) < 16,
                 "QUEUE_FULL",
@@ -55,6 +62,7 @@ class Tasks:
                 "progress": p,
                 "result": None,
                 "error": None,
+                "app": self.app,
             }
             self.items[ident] = record
             record["future"] = self.executor.submit(self.run, record, args)
@@ -65,7 +73,7 @@ class Tasks:
             record["state"] = "RUNNING"
         try:
             record["progress"].check()
-            record["result"] = self.app.call(record["action"], args, record["progress"])
+            record["result"] = record["app"].call(record["action"], args, record["progress"])
             terminal = "COMPLETE"
         except BaseException as exc:
             terminal = "CANCELLED" if getattr(exc, "code", "") == "CANCELLED" else "FAILED"
@@ -86,7 +94,7 @@ class Tasks:
             for t in self.items.values():
                 if details and t["id"] != details:
                     continue
-                r = {k: v for k, v in t.items() if k not in ("future", "progress", "result")}
+                r = {k: v for k, v in t.items() if k not in ("future", "progress", "result", "app")}
                 r["progress"] = t["progress"].state()
                 if details:
                     r["result"] = t["result"]
@@ -97,20 +105,31 @@ class Tasks:
         with self.lock:
             t = self.items.get(ident)
             require(t is not None, "TASK", "Unknown task")
+            if t["state"] not in ("QUEUED", "RUNNING"):
+                return {"id": ident, "cancel_requested": False, "state": t["state"]}
             t["progress"].cancelled.set()
             if t["state"] == "QUEUED" and t["future"].cancel():
                 t["progress"].finish()
                 t["completed"] = now()
                 t["state"] = "CANCELLED"
+                t["error"] = {
+                    "code": "CANCELLED",
+                    "message": "Queued operation cancelled before it started",
+                }
             return {"id": ident, "cancel_requested": True}
 
     def busy(self):
-        return any(t["state"] in ("QUEUED", "RUNNING") for t in self.items.values())
+        with self.lock:
+            return any(t["state"] in ("QUEUED", "RUNNING") for t in self.items.values())
 
     def close(self):
-        for t in self.items.values():
-            t["progress"].cancelled.set()
-        self.executor.shutdown(wait=True, cancel_futures=True)
+        # Python 3.8 has no shutdown(cancel_futures=...). Cancel queued futures
+        # explicitly and keep their observable task records terminal as well.
+        with self.lock:
+            self.closed = True
+            for ident in list(self.items):
+                self.cancel(ident)
+        self.executor.shutdown(wait=True)
 
 
 def make_server(app, port=8765):
@@ -185,6 +204,7 @@ def make_server(app, port=8765):
                         {
                             "/": "text/html; charset=utf-8",
                             "/app.js": "text/javascript; charset=utf-8",
+                            "/bootstrap.js": "text/javascript; charset=utf-8",
                             "/app.css": "text/css; charset=utf-8",
                         }[path],
                     )
@@ -235,20 +255,21 @@ def make_server(app, port=8765):
                 if self.path == "/api/preferences":
                     return self.reply(tasks.app.call("set_preferences", body))
                 if self.path == "/api/workspace":
-                    require(
-                        not tasks.busy(),
-                        "BUSY",
-                        "Finish or cancel current work before changing workspace",
-                    )
-                    candidate = Path(body["path"])
-                    require(
-                        (candidate / "workspace.sqlite").is_file(),
-                        "WORKSPACE",
-                        "Choose an existing V20 workspace",
-                    )
-                    tasks.app = Application(candidate)
-                    remember_workspace(candidate)
-                    return self.reply(tasks.app.call("status"))
+                    with tasks.lock:
+                        require(
+                            not tasks.busy(),
+                            "BUSY",
+                            "Finish or cancel current work before changing workspace",
+                        )
+                        candidate = Path(body["path"])
+                        require(
+                            (candidate / "workspace.sqlite").is_file(),
+                            "WORKSPACE",
+                            "Choose an existing supported workspace",
+                        )
+                        tasks.app = Application(candidate)
+                        remember_workspace(candidate)
+                        return self.reply(tasks.app.call("status"))
                 if self.path == "/api/stop":
                     require(
                         not tasks.busy(),

@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from archivist.application import Application
-from archivist import artifacts, inventory, planning, recovery
+from archivist import __version__, artifacts, inventory, planning, recovery
 from archivist.progress import Progress
 from archivist.store import Store
 from archivist.util import Problem, bytes_value, hash_file, json_read, locked
@@ -773,7 +773,7 @@ class SmallContracts(unittest.TestCase):
                 timeout=15,
             )
             self.assertEqual(p.returncode, 0, p.stderr)
-            self.assertEqual(json.loads(p.stdout)["version"], "2.0.0-alpha.1")
+            self.assertEqual(json.loads(p.stdout)["version"], __version__)
 
     def test_cli_help_no_application_side_effect(self):
         p = subprocess.run(

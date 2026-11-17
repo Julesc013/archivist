@@ -29,16 +29,23 @@ ROOT_FILES = (
     "pyproject.toml",
     "MANIFEST.in",
     ".gitignore",
+    ".gitattributes",
     "README.md",
     "CHANGELOG.md",
+    "TODO.md",
+    "ROADMAP.md",
+    "AGENTS.md",
     "LICENSE",
     "THIRD-PARTY.md",
     "START-HERE.txt",
     "CONTRIBUTING.md",
     "SECURITY.md",
     "requirements-dev.txt",
+    "requirements-browser.txt",
+    "package.json",
+    "package-lock.json",
 )
-DEFAULT_EPOCH = 1794873600  # 2026-11-17 00:00:00 UTC; fixed for this alpha snapshot.
+DEFAULT_EPOCH = 1794873600  # 2026-11-17 00:00:00 UTC; fixed for the 2.0.0 release.
 
 
 def inputs() -> list[Path]:

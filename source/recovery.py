@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""AP20Archive/1 independent recovery. Qualified on Python 3.12+; optional zstd.
+"""AP20Archive/1 independent recovery. Python 3.8+; optional zstd.
 
 This file is copied, unmodified, into every archive set as RESTORE.py. It does not
 import Archivist, open its workspace, trust executable metadata, or use
@@ -110,8 +110,53 @@ def is_link(st):
     return stat.S_ISLNK(st.st_mode) or bool(getattr(st, "st_file_attributes", 0) & 0x400)
 
 
-def no_links(path, missing=False):
+def normalize_system_path(path):
+    """Expand only verified macOS root aliases, never arbitrary user symlinks.
+
+    macOS commonly exposes /var, /tmp and /etc through root-owned links into
+    /private. Accept their exact standard targets only when /private and the
+    target are root-owned real directories. The usual descendant link/reparse
+    checks still run afterwards. This is not general-purpose resolve().
+    """
     path = Path(os.path.abspath(str(path)))
+    if (
+        sys.platform != "darwin"
+        or len(path.parts) < 2
+        or path.parts[1] not in ("var", "tmp", "etc")
+    ):
+        return path
+    name = path.parts[1]
+    alias = Path("/") / name
+    target = Path("/private") / name
+    try:
+        link = alias.lstat()
+        if not stat.S_ISLNK(link.st_mode) or link.st_uid != 0:
+            return path
+        if os.readlink(alias) not in ("private/" + name, "/private/" + name):
+            return path
+        parent = target.parent.lstat()
+        final = target.lstat()
+        if not all(stat.S_ISDIR(item.st_mode) and item.st_uid == 0 for item in (parent, final)):
+            return path
+        if parent.st_mode & 0o022:
+            return path
+        if final.st_mode & 0o022 and (name != "tmp" or not final.st_mode & stat.S_ISVTX):
+            return path
+        again = alias.lstat()
+        if (link.st_dev, link.st_ino, link.st_mode, link.st_uid) != (
+            again.st_dev,
+            again.st_ino,
+            again.st_mode,
+            again.st_uid,
+        ):
+            return path
+    except OSError:
+        return path
+    return target.joinpath(*path.parts[2:])
+
+
+def no_links(path, missing=False):
+    path = normalize_system_path(path)
     for p in reversed([path, *path.parents]):
         try:
             s = p.lstat()
@@ -451,7 +496,8 @@ def validate_receipt(root, reference, progress=None, hash_payload=True):
     )
     receipt_path = located(root, reference["receipt"])
     check(
-        file_hash(receipt_path) == reference["receipt_sha256"], "Package receipt checksum mismatch"
+        file_hash(receipt_path, progress) == reference["receipt_sha256"],
+        "Package receipt checksum mismatch",
     )
     r = read_json(receipt_path)
     check(isinstance(r, dict) and r.get("format") == "AP20Package/1", "Unsupported package format")
@@ -496,7 +542,7 @@ def validate_receipt(root, reference, progress=None, hash_payload=True):
         and manifest.stat().st_size == r["manifest_bytes"],
         "Stored length differs from receipt",
     )
-    check(file_hash(manifest) == r["manifest_sha256"], "Manifest checksum mismatch")
+    check(file_hash(manifest, progress) == r["manifest_sha256"], "Manifest checksum mismatch")
     if hash_payload:
         check(file_hash(artifact, progress) == r["artifact_sha256"], "Archive checksum mismatch")
     return r, artifact, manifest
@@ -708,7 +754,7 @@ def run(root, output=None, packages=None, progress=None, permissions=False):
         check(not output.exists(), "Restore destination must not already exist")
         check(output.parent.is_dir(), "Restore parent directory must exist")
         check(
-            not root.is_relative_to(output) and not output.is_relative_to(root),
+            root != output and output not in root.parents and root not in output.parents,
             "Restore destination overlaps archive set",
         )
     partial = None

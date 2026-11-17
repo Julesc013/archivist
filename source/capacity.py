@@ -17,6 +17,23 @@ MANIFEST_ENTRY_ESTIMATE_BYTES = 512
 RECEIPT_ESTIMATE_BYTES = 4096
 
 
+def package_metadata_dependencies(packages):
+    """Return source-local dependencies from the saved logical package rows."""
+    metadata = {}
+    for package in packages:
+        if package["kind"] == "directories":
+            metadata.setdefault(package["snapshot_id"], []).append(package["id"])
+    for values in metadata.values():
+        values.sort()
+    dependencies = {
+        package["id"]: list(metadata.get(package["snapshot_id"], ()))
+        for package in packages
+        if package["kind"] == "data"
+    }
+    metadata_ids = sorted(ident for values in metadata.values() for ident in values)
+    return dependencies, metadata_ids
+
+
 def metadata_plan_selection(selected_ids, dependencies, *, known_metadata_ids=()) -> dict:
     """Report dependency coverage without changing selected packages or bytes.
 

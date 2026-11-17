@@ -12,6 +12,7 @@ import unicodedata
 import uuid
 from pathlib import Path
 from typing import Any, Iterator
+from .recovery import normalize_system_path
 
 CHUNK = 1024 * 1024
 APP_ID = 0x41503230
@@ -200,7 +201,7 @@ def is_link(st) -> bool:
 
 
 def no_links(path: Path, missing_ok: bool = False) -> Path:
-    path = Path(os.path.abspath(os.path.expanduser(str(path))))
+    path = normalize_system_path(os.path.expanduser(str(path)))
     chain = [path, *path.parents]
     for p in reversed(chain):
         try:

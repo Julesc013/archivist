@@ -1,68 +1,89 @@
-# Development
+# Contributing to Archivist
 
-Use Python3.12+ and an isolated checkout. Never use personal archive payloads as
-test fixtures. No repository service or credentials are needed for local work.
+Repository: https://github.com/Julesc013/archivist
 
-## Ownership boundaries
+Use an isolated checkout and synthetic data. The application supports Python
+3.8 and later; a maintained Python release is the default development choice.
+Do not use personal archive payloads, real cartridges or credentials as fixtures.
+Local development needs no repository service or account.
 
-`application.py` exposes shared operations. CLI and HTTP parse/serialize inputs;
-they do not implement alternative packing, capacity or verification algorithms.
-`planning.py`, `capacity.py`, `artifacts.py`, `destinations.py`, `inventory.py`,
-`evidence.py` and `store.py` own their respective domain operations.
-`catalogue.py` owns bounded read queries. `archive_html.py` renders a catalogue.
-`recovery.py` must remain independently executable with only standard-library
-imports and an optional zstd subprocess.
+## Boundaries
 
-Do not create empty directory frameworks or split modules to meet an arbitrary
-file/line target. Introduce a new module for a coherent responsibility. Prefer
-typed boundaries and explicit byte/evidence fields over dictionaries that mix
-estimates with measured or verified claims.
+`application.py` exposes shared operations. CLI and HTTP parse and serialize
+inputs; they do not implement alternative packing, capacity or verification
+algorithms. Domain modules own scanning, planning, encoding, copying and evidence.
+`recovery.py` remains independently executable with standard-library imports;
+zstd is an optional external decoder. See [architecture](docs/architecture/README.md).
 
-## Checks
+Keep code directly in `source/`. Setuptools maps that directory to the unique
+`archivist` namespace. Avoid empty framework directories and module splits made
+only to meet a line-count target. Prefer typed boundaries and explicit byte and
+evidence fields where they reduce ambiguity. Estimates, measurements and verified
+observations must remain distinct.
+
+## Local checks
+
+From the repository root:
 
 ```sh
-python3 scripts/run_tests.py --json-out docs/validation/unit-tests-local.json
+python3 scripts/run_tests.py --json-out /path/to/local-test-results.json
 node tests/gui_state.test.cjs
 python3 -m compileall -q source scripts tests
 ```
 
-The Python suite uses unittest and the standard library. Tests with OS/tool
-requirements report explicit skips. Preserve tests that verify independent
-outcomes, no-replace behaviour, tamper rejection, crash recovery and external
-TAR readability. A negative fixture must be valid before the one intended
-mutation; an earlier seal failure is not evidence of traversal protection.
+The Python suite uses unittest. OS/tool-specific tests report explicit skips;
+a skipped native test is not a passing platform qualification. Preserve tests
+of independent outcomes: overwrite refusal, tampering, interrupted publication,
+exact-capacity retry, metadata closure and external TAR readability. Negative
+fixtures must pass baseline validation before the intended mutation. An earlier
+checksum failure does not test a later path-traversal guard.
 
-Optional tools: install setuptools/wheel to build wheels/sdists, Ruff for lint,
-and Playwright plus its browser for GUI tests. These are development dependencies.
-The pinned development requirements and CI workflow are release gates when run;
-their presence alone is not validation. Browser/CSP enforcement, accessibility
-and native dialogs must be tested in an actual browser before claiming them.
+Development requirements are pinned in `requirements-dev.txt`, with interpreter
+markers where tool support differs. Setuptools/wheel build Python distributions;
+Ruff checks source; Playwright and its browser binaries exercise the actual UI.
+These are development dependencies, not mandatory application dependencies.
+Feature probes and JavaScript syntax checks do not replace real browser tests.
 
-## Builds
+## Build and distribution checks
+
+Use a new output directory for each invocation:
 
 ```sh
-python3 scripts/build_release.py --output dist
-python3 scripts/check_release.py dist/archivist-2.0.0-alpha.1.zip dist/archivist-2.0.0-alpha.1.tar.gz
-python3 -c 'import setuptools.build_meta as b; b.build_wheel("dist"); b.build_sdist("dist")'
-python3 scripts/check_python_distribution.py --build --output /path/to/new/build-check
+python3 scripts/build_release.py --output /path/to/new/portable-dist
+python3 scripts/check_release.py /path/to/new/portable-dist/archivist-2.0.0.zip /path/to/new/portable-dist/archivist-2.0.0.tar.gz
+python3 scripts/check_python_distribution.py --build --output /path/to/new/python-distribution-check
 ```
 
-The portable packager uses an explicit input allowlist and fixed file ordering,
-timestamps, owner IDs and permissions. Repeated builds are compared with the
-same inputs and toolchain. A different Python/zlib toolchain can encode the
-same source differently; no cross-toolchain identity is asserted. Existing
-output names are refused. The internal SHA256SUMS covers all selected source
-files; keep an externally recorded distribution digest for authenticity context.
+The portable packager has an explicit file allowlist, ordering, timestamps, owner
+IDs and permissions. Repeated identical-input builds are checked with the same
+toolchain. Cross-toolchain compressed-byte identity is not promised. Existing
+output names are refused. The distribution's internal SHA256SUMS covers selected
+source files; keep the separately published archive digest as well.
 
-## Versioning and release
+Python-distribution qualification builds and installs without runtime network
+resolution, launches the console command outside the checkout, checks packaged
+static assets, runs a small archive workflow and tests independent recovery.
+An sdist must retain the portable launcher and rebuild the same package inventory.
 
-`source/__init__.py` owns the product version. Python package metadata translates
-`2.0.0-alpha.1` to PEP440 `2.0.0a1`. Archive schemas, workspace schema and public
-operation contracts have their own compatibility rules. Renaming the project
-is not permission to rewrite stored format IDs. See docs/ROADMAP.md.
+## CI and release
 
-Changes touching format readers, publication, extraction or capacity need a
-review of their documented failure modes. Qualify each native adapter on its
-actual platform. Do not remove an honest skip or lower a gate merely to obtain
-a green badge.
+`.github/workflows/test.yml` defines native Python/OS tests, actual browser engines
+and fallback modes, portable distribution checks and Python distribution checks.
+The [validation record](docs/validation/README.md) records the environments and
+outcomes that actually ran. Workflow definitions are not evidence of success.
 
+The release job requires its prerequisite jobs to succeed and an explicitly
+marked `[release]` push to `main`. It publishes qualified GitHub release assets
+and evidence; it does not publish to PyPI. `scripts/prepare_release.py` assembles
+release material and does not itself publish. Do not bypass a failing gate or
+remove an honest skip solely to obtain a green badge.
+
+`source/__init__.py` owns the product version. Keep the matching bracketed
+version heading in CHANGELOG.md. Archive formats, workspace schema and public
+operation contracts have independent compatibility rules. Existing AP20 format
+identifiers are data, not branding. See [ROADMAP.md](ROADMAP.md).
+
+A contribution is ready when its bounded behavior, failure cases and evidence
+are reviewable together. Update [TODO.md](TODO.md) acceptance IDs and affected
+contracts; keep observed test counts in validation evidence rather than copying
+them into every document. Physical adapters need tests on the named hardware.

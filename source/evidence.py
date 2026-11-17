@@ -11,6 +11,7 @@ import tempfile
 import zipfile
 import zlib
 from pathlib import Path
+from .compat import configure_sqlite, require_runtime
 from .inventory import InventoryBuilder
 from .recovery import publish_new
 from .planning import Planner, Policy
@@ -27,12 +28,14 @@ from .util import (
     rel_parts,
     require,
     uid,
+    within,
 )
 
 MAX_DATABASE = 16 * 1024**3
 
 
 def readonly(path):
+    require_runtime()
     path = no_links(Path(path))
     for ending in ("-wal", "-journal"):
         journal = Path(str(path) + ending)
@@ -43,16 +46,19 @@ def readonly(path):
             path=str(path),
         )
     db = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
-    db.row_factory = sqlite3.Row
-    db.execute("PRAGMA query_only=ON")
-    db.execute("PRAGMA trusted_schema=OFF")
-    require(
-        not db.execute(
-            "SELECT name FROM sqlite_master WHERE type IN ('view','trigger') OR UPPER(sql) LIKE 'CREATE VIRTUAL%'"
-        ).fetchone(),
-        "SQL_SCHEMA",
-        "Executable/virtual schema objects are not accepted",
-    )
+    try:
+        db.row_factory = sqlite3.Row
+        configure_sqlite(db, read_only=True)
+        require(
+            not db.execute(
+                "SELECT name FROM sqlite_master WHERE type IN ('view','trigger') OR UPPER(sql) LIKE 'CREATE VIRTUAL%'"
+            ).fetchone(),
+            "SQL_SCHEMA",
+            "Executable/virtual schema objects are not accepted",
+        )
+    except BaseException:
+        db.close()
+        raise
     return db
 
 
@@ -106,6 +112,7 @@ def export_workspace(store, output, progress):
         dbpath = Path(td) / "workspace.sqlite"
         target = sqlite3.connect(dbpath)
         try:
+            configure_sqlite(target)
             store.db.backup(
                 target,
                 pages=256,
@@ -159,7 +166,7 @@ def import_workspace(source, destination, progress):
     destination = no_links(Path(destination), missing_ok=True)
     require(not destination.exists(), "IMPORT_EXISTS", "Import requires a NEW workspace directory")
     require(
-        not source.is_relative_to(destination),
+        not within(source, destination),
         "IMPORT_OVERLAP",
         "Input is inside the proposed destination",
     )
@@ -225,17 +232,20 @@ def import_workspace(source, destination, progress):
             db.close()
         # Import is a new local binding context, not authority to write to old devices.
         db = sqlite3.connect(temp / "workspace.sqlite")
-        db.execute("PRAGMA trusted_schema=OFF")
-        db.execute("UPDATE destinations SET enabled=0")
-        db.execute("UPDATE operations SET state='INTERRUPTED' WHERE state='RUNNING'")
-        for row in db.execute("SELECT id,identity FROM sources").fetchall():
-            identity = json.loads(row[1])
-            identity["unbound"] = True
-            db.execute(
-                "UPDATE sources SET identity=? WHERE id=?", (canonical(identity).decode(), row[0])
-            )
-        db.commit()
-        db.close()
+        try:
+            configure_sqlite(db)
+            db.execute("UPDATE destinations SET enabled=0")
+            db.execute("UPDATE operations SET state='INTERRUPTED' WHERE state='RUNNING'")
+            for row in db.execute("SELECT id,identity FROM sources").fetchall():
+                identity = json.loads(row[1])
+                identity["unbound"] = True
+                db.execute(
+                    "UPDATE sources SET identity=? WHERE id=?",
+                    (canonical(identity).decode(), row[0]),
+                )
+            db.commit()
+        finally:
+            db.close()
         atomic_json(
             temp / "IMPORT.json",
             {
@@ -276,10 +286,9 @@ def export_inventory(store, snapshot, output, progress):
     progress.phase("Export records", json.loads(scan["counts"]).get("observations"), "records")
     n = 0
     partial = output.with_name(output.name + ".partial-" + uuid_short())
-    with (
-        partial.open("xb") as raw,
-        gzip.GzipFile(filename="", fileobj=raw, mode="wb", mtime=0) as out,
-    ):
+    with partial.open("xb") as raw, gzip.GzipFile(
+        filename="", fileobj=raw, mode="wb", mtime=0
+    ) as out:
         out.write(
             canonical(
                 {

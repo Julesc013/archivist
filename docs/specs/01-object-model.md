@@ -15,7 +15,7 @@ one published copy of a selected archive set on that destination.
 
 **MODEL-03.** Encoded-byte identity is SHA-256 of the encoded artifact. Path,
 codec label or package ID alone is not that identity. Copying an already built
-artifact MUST preserve its bytes and checksum. This alpha's schema stores
+artifact MUST preserve its bytes and checksum. The 2.0.0 schema stores
 artifact evidence in build/package receipts rather than a separate artifact table.
 
 ## Observations and plans
@@ -52,5 +52,5 @@ record or silently overwriting one.
 
 **MODEL-06.** Verification states describe observations: planned, built,
 content-verified and immediate-copy-readback are distinct from hardware-qualified
-offline/reloaded readability. No transition to the latter is implied in this alpha.
+offline/reloaded readability. No transition to the latter is implied by software-only verification.
 

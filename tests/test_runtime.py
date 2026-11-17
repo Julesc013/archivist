@@ -59,13 +59,19 @@ class HttpTests(Fixture):
         status, raw, headers = self.request("/", auth=False)
         self.assertEqual(status, 200)
         self.assertIn(b"Archivist", raw)
-        self.assertIn(b"/app.js", raw)
+        self.assertIn(b"/bootstrap.js", raw)
         self.assertIn(b"/app.css", raw)
-        for path, mime in [("/app.js", "javascript"), ("/app.css", "css")]:
+        for path, mime in [
+            ("/bootstrap.js", "javascript"),
+            ("/app.js", "javascript"),
+            ("/app.css", "css"),
+        ]:
             status, raw, headers = self.request(path, auth=False)
             self.assertEqual(status, 200)
             self.assertGreater(len(raw), 100)
             self.assertIn(mime, headers["Content-Type"])
+            if path == "/bootstrap.js":
+                self.assertIn(b"/app.js", raw)
         self.assertIn("frame-ancestors 'none'", headers["Content-Security-Policy"])
 
     def test_source_code_and_traversal_not_served(self):
