@@ -4,7 +4,7 @@ Changes to Archivist are recorded here by product version. Archive format,
 workspace schema and operation-contract versions are separate. Release evidence
 and actual test environments are recorded in [docs/validation](docs/validation/README.md).
 
-## [2.0.0]
+## [2.0.0] — 2026-11-17
 
 First stable Archivist release line, published from
 [github.com/Julesc013/archivist](https://github.com/Julesc013/archivist).
@@ -31,6 +31,12 @@ hardware or historical browser versions as supported.
   application. Native dialog, details and newer CSS support have fallbacks.
 - Root `TODO.md` and `ROADMAP.md` as the single current backlog and release plan,
   with bounded minor-release goals and explicit qualification gates.
+- Release gates configured for 19 native OS/Python combinations and three
+  browser engines (Chromium, Firefox and WebKit), plus the optional-dialog
+  fallback. Completed results belong to the recorded validation evidence.
+- A Windows regression creates an actual directory junction in an owned fixture,
+  checks that a junction scan root is refused and a descendant is excluded, and
+  verifies that its external target remains untouched.
 
 ### Fixed
 
@@ -38,6 +44,13 @@ hardware or historical browser versions as supported.
   fresh `os.stat(..., follow_symlinks=False)` rather than zero-filled cached
   `DirEntry.stat()` identity fields. This prevents false mount exclusions and
   source-device changes.
+- Windows inventory hashing compares `ctime` before and after reading through
+  the same open descriptor, avoiding incompatible creation/change-time meanings
+  in path-based `stat` and descriptor-based `fstat`. Device, inode, size and
+  modification-time crosschecks remain; POSIX also retains the pre-open `ctime`
+  crosscheck. See [compatibility](docs/guides/compatibility.md).
+- Workspace/source containment compares both resolved paths, including Windows
+  short-path aliases; workspace descendants remain forbidden scan roots.
 - Verified macOS system aliases `/var`, `/tmp` and `/etc` are normalized to their
   root-owned `/private` targets. Arbitrary user and descendant symlinks remain
   refused in both application and standalone recovery.
@@ -48,6 +61,8 @@ hardware or historical browser versions as supported.
   reaps it; no guarantee is made for uninterruptible kernel/device I/O.
 - Progress-observer failures cannot turn a completed data operation into an
   ambiguous write outcome; observer failure is reported separately.
+- Completed plan coverage reports the actual member count; bounded progress
+  updates also make long coverage checks visible without per-member UI updates.
 - Existing GUI selection, paging, revision, reconnect and readback state repairs
   remain shared with the CLI's underlying operations.
 

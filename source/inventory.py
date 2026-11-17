@@ -504,7 +504,11 @@ def scan_filesystem(
                                                 opened.st_size,
                                                 opened.st_mtime_ns,
                                             )
-                                            == (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns),
+                                            == (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns)
+                                            and (
+                                                sys.platform == "win32"
+                                                or opened.st_ctime_ns == st.st_ctime_ns
+                                            ),
                                             "SOURCE_CHANGED",
                                             "File changed before hashing",
                                             path=rel,
@@ -513,6 +517,11 @@ def scan_filesystem(
                                             progress.check()
                                             h.update(block)
                                         after = os.fstat(stream.fileno())
+                                        # On affected Windows runtimes, stat(path)
+                                        # exposes birth time as ctime while fstat
+                                        # exposes change time (CPython #157671).
+                                        # Compare the same descriptor API before
+                                        # and after reading; do not discard ctime.
                                         require(
                                             (
                                                 after.st_dev,
@@ -522,11 +531,11 @@ def scan_filesystem(
                                                 after.st_ctime_ns,
                                             )
                                             == (
-                                                st.st_dev,
-                                                st.st_ino,
-                                                st.st_size,
-                                                st.st_mtime_ns,
-                                                st.st_ctime_ns,
+                                                opened.st_dev,
+                                                opened.st_ino,
+                                                opened.st_size,
+                                                opened.st_mtime_ns,
+                                                opened.st_ctime_ns,
                                             ),
                                             "SOURCE_CHANGED",
                                             "File changed while hashing",

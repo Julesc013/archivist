@@ -47,13 +47,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes zstd
       - run: python scripts/run_tests.py --quiet --json-out native-validation.json
+      - name: Check Windows 3.12 file identity stability
+        if: runner.os == 'Windows' && matrix.python == '3.12'
+        shell: bash
+        run: |
+          python -c 'import sys, unittest; sys.path.insert(0, "tests"); name="test_compat.WindowsIdentityTests.test_scan_uses_full_stat_identity_when_direntry_reports_zeros"; suite=unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromName(name) for _ in range(20)); result=unittest.TextTestRunner(verbosity=2).run(suite); sys.exit(0 if result.wasSuccessful() else 1)' 2>&1 | tee identity-stability.log
       - run: node tests/gui_state.test.cjs
       - run: node tests/browser_capabilities.test.cjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: tests-${{ matrix.os }}-${{ matrix.python }}
-          path: native-validation.json
+          path: |
+            native-validation.json
+            identity-stability.log
           if-no-files-found: error
 
   quality-and-build:

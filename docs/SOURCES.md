@@ -12,6 +12,8 @@ that this application satisfies a specification or has passed a hardware test.
 | SQLite trusted-schema introduction | https://www.sqlite.org/releaselog/3_31_0.html |
 | SQLite safety settings | https://www.sqlite.org/pragma.html |
 | Windows DirEntry identity fields | https://docs.python.org/3.12/library/os.html#os.DirEntry.stat |
+| Windows path/descriptor `ctime` mismatch, confirmed 2026-09-17 | https://github.com/python/cpython/issues/157671 |
+| Python 3.12 Windows timestamp semantics and deprecation | https://docs.python.org/3.12/library/os.html#os.stat_result.st_ctime_ns |
 | Package-to-directory mapping | https://setuptools.pypa.io/en/latest/references/keywords.html |
 | TAR compression/multi-volume limit | https://www.gnu.org/software/tar/manual/html_node/gzip.html |
 | fpart directory/file planning | https://www.fpart.org/fpart/ |

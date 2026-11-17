@@ -312,6 +312,8 @@ def finalize(store, plan_id, policy, progress, provenance=None, persist=True):
         errors += counts.get("errors", 0)
         excluded += counts.get("excluded", 0)
         h.update(canonical([source["snapshot_id"], source["fingerprint"], source["namespace"]]))
+    progress.phase("Check coverage", expected_files + expected_dirs, "members")
+    checked_members = 0
     count = logical = assigned_files = assigned_dirs = blocked = small = 0
     for package in store.rows("SELECT * FROM packages WHERE plan_id=? ORDER BY id", (plan_id,)):
         ph = hashlib.sha256(package["snapshot_id"].encode())
@@ -342,6 +344,9 @@ def finalize(store, plan_id, policy, progress, provenance=None, persist=True):
             size += r["size"] if r["kind"] == "file" else 0
             files += int(r["kind"] == "file")
             dirs += int(r["kind"] == "directory")
+            checked_members += 1
+            if checked_members % 1024 == 0:
+                progress.update(checked_members, path)
         if not files and not dirs:
             if persist:
                 store.db.execute(
@@ -388,6 +393,7 @@ def finalize(store, plan_id, policy, progress, provenance=None, persist=True):
         expected=[expected_files, expected_dirs],
         assigned=[assigned_files, assigned_dirs],
     )
+    progress.update(checked_members)
     counts = {
         "packages": count,
         "logical_bytes": logical,
@@ -430,7 +436,6 @@ def create_plan(store, snapshots, progress, label="Archive plan", policy=None):
         progress.phase("Plan directories", None, "directories")
         for snapshot in snapshots:
             planner.source(snapshot)
-        progress.phase("Check coverage", None, "members")
         return planner.finish()
     except BaseException:
         store.db.rollback()

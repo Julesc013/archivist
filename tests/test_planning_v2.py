@@ -14,6 +14,20 @@ class PlanningV2Tests(Fixture):
     def package_rows(self, plan):
         return self.app.call("packages", {"plan_id": plan["id"]})["packages"]
 
+    def test_coverage_progress_finishes_with_the_actual_member_count(self):
+        self.file("Project/a.txt", b"a")
+        self.file("Project/b.txt", b"b")
+        (self.source / "Empty").mkdir()
+        snapshot = self.scan()["snapshot_id"]
+        progress = Progress()
+        plan = self.app.call("plan", {"snapshots": [snapshot]}, progress)
+        expected = plan["counts"]["files"] + plan["counts"]["directories"]
+        state = progress.state()
+        self.assertGreater(expected, 0)
+        self.assertEqual(state["phase"], "Check coverage")
+        self.assertEqual(state["unit"], "members")
+        self.assertEqual((state["done"], state["total"]), (expected, expected))
+
     def test_root_direct_files_keep_directory_cohesion_below_maximum(self):
         for name in ("readme.txt", "image.jpg", "data.bin"):
             self.file(name, b"x" * 12_000)

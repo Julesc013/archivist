@@ -48,6 +48,7 @@ def prepare(inputs, output, commit, run_url):
     qualified = inputs / "qualified-distributions"
     native = sorted(inputs.glob("tests-*/native-validation.json"))
     require(bool(native), "Native qualification evidence is missing")
+    native_results = []
     for path in native:
         row = read(path)
         require(row.get("source_commit") == commit, "Native evidence is for a different commit")
@@ -55,6 +56,24 @@ def prepare(inputs, output, commit, run_url):
         require(
             row.get("run", 0) > 0 and row.get("failed") == 0 and row.get("errors") == 0,
             "Native qualification is incomplete or failed",
+        )
+        native_results.append(
+            {
+                "job": path.parent.name,
+                **{
+                    key: row.get(key)
+                    for key in (
+                        "platform",
+                        "python",
+                        "sqlite",
+                        "run",
+                        "passed",
+                        "failed",
+                        "errors",
+                        "skipped",
+                    )
+                },
+            }
         )
     browser = []
     for engine in ("chromium", "firefox", "webkit"):
@@ -108,6 +127,7 @@ def prepare(inputs, output, commit, run_url):
         "source_commit": commit,
         "workflow_run": run_url,
         "native_jobs": len(native),
+        "native_results": native_results,
         "browser_engines": [
             {"engine": row["browser"], "version": row["browser_version"]} for row in browser
         ],

@@ -45,6 +45,26 @@ Windows filename and permission semantics differ from POSIX and remain explicit
 in scan/restore diagnostics. Live Everything 1.5/ES operation is an additional
 integration qualification beyond the filesystem backend.
 
+On affected Windows/Python versions, path-based `os.stat()` can report creation
+time in `st_ctime_ns` while `os.fstat()` reports change time for the same file.
+CPython maintainers confirmed this mismatch on 2026-09-17 in
+[issue #157671](https://github.com/python/cpython/issues/157671). The
+[Python 3.12 timestamp documentation](https://docs.python.org/3.12/library/os.html#os.stat_result.st_ctime_ns)
+also deprecates the Windows creation-time meaning of `st_ctime_ns` in favor of
+`st_birthtime_ns`; the meaning must not be assumed interchangeable across APIs.
+
+Inventory hashing compares `fstat()` observations before and after reading the
+same open descriptor, including device, inode, size, modification time and
+`ctime`. The path-to-descriptor check still compares device, inode, size and
+modification time; POSIX also compares the pre-open `ctime`. This avoids false
+Windows source-change reports while retaining detection of descriptor metadata
+changes during hashing. These live checks do not provide snapshot consistency.
+
+A platform-specific regression creates a real Windows directory junction and
+checks root refusal, descendant exclusion and preservation of the external
+target. It requires Windows and a fixture volume that reports reparse-point
+support; a failed junction creation on a supporting volume is a test failure.
+
 On macOS standard `/var`, `/tmp` and `/etc` aliases may normalize to their verified
 root-owned `/private` targets. Link targets, ownership and relevant writable/sticky
 properties are checked. This does not permit arbitrary user-created links or links
@@ -69,6 +89,12 @@ No precise historical browser version is promised from these checks alone.
 Qualification uses actual browser engines, including fallback and no-JavaScript
 cases; consult the recorded versions/results. The offline ARCHIVE.html catalogue
 has no JavaScript dependency and is distinct from the interactive application.
+
+The [release workflow](../../.github/workflows/test.yml) configures 19 native
+OS/Python combinations and three browser-engine jobs: Chromium, Firefox and
+WebKit. It also exercises the optional-dialog fallback in Chromium. This is the
+configured gate coverage, not a statement that a particular run passed; completed
+results and their exact environments are recorded in [validation](../validation/README.md).
 
 ## Media scope
 
